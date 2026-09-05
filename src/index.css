@@ -1,0 +1,11 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Zones tactiles confortables sur mobile, comme validé sur les maquettes. */
+  button,
+  input[type='submit'] {
+    min-height: 44px;
+  }
+}
