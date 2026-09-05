@@ -1,12 +1,22 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
 export default function Login() {
-  const { signIn } = useAuth();
+  const { signIn, session, loading, roles } = useAuth();
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Une fois connecté ET les rôles chargés, on part automatiquement
+  // vers le bon espace — sans dépendre d'un clic ou d'un délai fixe.
+  useEffect(() => {
+    if (!loading && session && roles.length > 0) {
+      navigate(`/${roles[0]}`, { replace: true });
+    }
+  }, [loading, session, roles, navigate]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
