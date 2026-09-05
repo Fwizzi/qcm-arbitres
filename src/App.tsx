@@ -3,6 +3,9 @@ import { AuthProvider, useAuth } from './hooks/useAuth';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
 import AdminDashboard from './pages/admin/Dashboard';
+import Comptes from './pages/admin/Comptes';
+import Journal from './pages/admin/Journal';
+import Reglages from './pages/admin/Reglages';
 import FormateurDashboard from './pages/formateur/Dashboard';
 import ArbitreAccueil from './pages/arbitre/Dashboard';
 
@@ -24,6 +27,30 @@ export default function App() {
             element={
               <ProtectedRoute role="admin">
                 <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/comptes"
+            element={
+              <ProtectedRoute role="admin">
+                <Comptes />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/journal"
+            element={
+              <ProtectedRoute role="admin">
+                <Journal />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/reglages"
+            element={
+              <ProtectedRoute role="admin">
+                <Reglages />
               </ProtectedRoute>
             }
           />
