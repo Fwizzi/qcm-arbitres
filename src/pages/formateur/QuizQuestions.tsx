@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import AppLayout from '../../components/AppLayout';
 import { supabase } from '../../lib/supabaseClient';
+import { extraireErreurFonction } from '../../lib/functionsError';
 
 type QuestionType = 'video' | 'image' | 'text';
 
@@ -117,10 +118,14 @@ export default function QuizQuestions() {
 
     if (q.media_url) {
       setChargementApercu(true);
-      const { data } = await supabase.functions.invoke('r2-upload-url', {
+      const { data, error } = await supabase.functions.invoke('r2-upload-url', {
         body: { action: 'read', key: q.media_url },
       });
-      setApercu(data?.readUrl ?? null);
+      if (error || !data?.readUrl) {
+        setErreurForm(await extraireErreurFonction(error, data));
+      } else {
+        setApercu(data.readUrl);
+      }
       setChargementApercu(false);
     }
 
@@ -132,10 +137,10 @@ export default function QuizQuestions() {
     const extension = fichier.name.split('.').pop() ?? 'bin';
 
     const { data, error } = await supabase.functions.invoke('r2-upload-url', {
-      body: { action: 'upload', fileType: fichier.type, fileExtension: extension },
+      body: { action: 'upload', fileType: fichier.type, fileExtension: extension, fileSize: fichier.size },
     });
     if (error || !data?.uploadUrl) {
-      throw new Error(data?.error ?? "Impossible d'obtenir un lien d'envoi.");
+      throw new Error(await extraireErreurFonction(error, data));
     }
 
     const reponse = await fetch(data.uploadUrl, {
