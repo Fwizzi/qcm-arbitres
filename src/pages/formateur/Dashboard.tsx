@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import AppLayout from '../../components/AppLayout';
+import FormateurNav from '../../components/FormateurNav';
 import { supabase } from '../../lib/supabaseClient';
 import { useAuth } from '../../hooks/useAuth';
 
@@ -53,6 +54,7 @@ export default function FormateurDashboard() {
 
   return (
     <AppLayout>
+      <FormateurNav />
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-lg font-semibold">Mes QCM</h1>
         <Link
