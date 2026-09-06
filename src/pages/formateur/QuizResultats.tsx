@@ -204,11 +204,7 @@ export default function QuizResultats() {
               </span>
             )}
             {l.statut === 'en_cours' && <span className="text-xs text-card-yellow">En cours</span>}
-            {l.statut === 'non_repondu' && (
-              <button type="button" disabled className="text-xs border border-border rounded px-2.5 py-1 opacity-50">
-                Relancer
-              </button>
-            )}
+            {l.statut === 'non_repondu' && <span className="text-xs text-muted">{l.email}</span>}
           </li>
         ))}
       </ul>
