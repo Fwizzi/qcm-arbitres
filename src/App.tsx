@@ -9,6 +9,7 @@ import Reglages from './pages/admin/Reglages';
 import FormateurDashboard from './pages/formateur/Dashboard';
 import QuizForm from './pages/formateur/QuizForm';
 import QuizQuestions from './pages/formateur/QuizQuestions';
+import QuizResultats from './pages/formateur/QuizResultats';
 import Groupes from './pages/formateur/Groupes';
 import GroupMembers from './pages/formateur/GroupMembers';
 import ArbitreAccueil from './pages/arbitre/Dashboard';
@@ -87,6 +88,14 @@ export default function App() {
             element={
               <ProtectedRoute role="formateur">
                 <QuizQuestions />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/formateur/qcm/:id/resultats"
+            element={
+              <ProtectedRoute role="formateur">
+                <QuizResultats />
               </ProtectedRoute>
             }
           />
