@@ -9,6 +9,8 @@ import Reglages from './pages/admin/Reglages';
 import FormateurDashboard from './pages/formateur/Dashboard';
 import QuizForm from './pages/formateur/QuizForm';
 import QuizQuestions from './pages/formateur/QuizQuestions';
+import Groupes from './pages/formateur/Groupes';
+import GroupMembers from './pages/formateur/GroupMembers';
 import ArbitreAccueil from './pages/arbitre/Dashboard';
 
 function AccueilRedirect() {
@@ -85,6 +87,22 @@ export default function App() {
             element={
               <ProtectedRoute role="formateur">
                 <QuizQuestions />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/formateur/groupes"
+            element={
+              <ProtectedRoute role="formateur">
+                <Groupes />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/formateur/groupes/:id"
+            element={
+              <ProtectedRoute role="formateur">
+                <GroupMembers />
               </ProtectedRoute>
             }
           />
