@@ -75,11 +75,8 @@ export default function FormateurDashboard() {
         {quizzes.map((q) => {
           const statut = STATUT[q.computed_status];
           return (
-            <li key={q.id}>
-              <Link
-                to={`/formateur/qcm/${q.id}`}
-                className="block bg-surface border border-border rounded p-3"
-              >
+            <li key={q.id} className="bg-surface border border-border rounded p-3">
+              <Link to={`/formateur/qcm/${q.id}`} className="block mb-2">
                 <div className="flex items-center justify-between mb-1 gap-2">
                   <span className="text-sm font-medium">{q.title}</span>
                   <span className={`text-xs rounded px-2 py-0.5 shrink-0 ${statut.className}`}>
@@ -89,6 +86,12 @@ export default function FormateurDashboard() {
                 <p className="text-xs text-muted">
                   {formatDate(q.period_start)} → {formatDate(q.period_end)}
                 </p>
+              </Link>
+              <Link
+                to={`/formateur/qcm/${q.id}/resultats`}
+                className="block text-center text-xs border border-border rounded py-1.5"
+              >
+                Voir les résultats
               </Link>
             </li>
           );
