@@ -37,12 +37,15 @@ export default function QuizQuestions() {
   const [loading, setLoading] = useState(true);
   const [erreurListe, setErreurListe] = useState<string | null>(null);
 
+  const [questionEnEditionId, setQuestionEnEditionId] = useState<string | null>(null);
   const [type, setType] = useState<QuestionType>('text');
   const [texte, setTexte] = useState('');
   const [explication, setExplication] = useState('');
   const [options, setOptions] = useState<AnswerOption[]>([nouvelleOption(), nouvelleOption()]);
   const [fichier, setFichier] = useState<File | null>(null);
   const [apercu, setApercu] = useState<string | null>(null);
+  const [mediaKeyExistant, setMediaKeyExistant] = useState<string | null>(null);
+  const [chargementApercu, setChargementApercu] = useState(false);
   const [enregistrement, setEnregistrement] = useState(false);
   const [erreurForm, setErreurForm] = useState<string | null>(null);
 
@@ -88,11 +91,40 @@ export default function QuizQuestions() {
   }
 
   function reinitialiserFormulaire() {
+    setQuestionEnEditionId(null);
     setType('text');
     setTexte('');
     setExplication('');
     setOptions([nouvelleOption(), nouvelleOption()]);
+    setMediaKeyExistant(null);
     choisirFichier(null);
+  }
+
+  async function commencerEdition(q: QuestionRow) {
+    setErreurForm(null);
+    setQuestionEnEditionId(q.id);
+    setType(q.type);
+    setTexte(q.text);
+    setExplication(q.explanation ?? '');
+    setOptions(
+      q.answer_options.length > 0
+        ? q.answer_options.map((o) => ({ id: o.id, text: o.text, is_correct: o.is_correct }))
+        : [nouvelleOption(), nouvelleOption()]
+    );
+    setFichier(null);
+    setApercu(null);
+    setMediaKeyExistant(q.media_url);
+
+    if (q.media_url) {
+      setChargementApercu(true);
+      const { data } = await supabase.functions.invoke('r2-upload-url', {
+        body: { action: 'read', key: q.media_url },
+      });
+      setApercu(data?.readUrl ?? null);
+      setChargementApercu(false);
+    }
+
+    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
   }
 
   async function televerserMedia(): Promise<string> {
@@ -100,7 +132,7 @@ export default function QuizQuestions() {
     const extension = fichier.name.split('.').pop() ?? 'bin';
 
     const { data, error } = await supabase.functions.invoke('r2-upload-url', {
-      body: { fileType: fichier.type, fileExtension: extension },
+      body: { action: 'upload', fileType: fichier.type, fileExtension: extension },
     });
     if (error || !data?.uploadUrl) {
       throw new Error(data?.error ?? "Impossible d'obtenir un lien d'envoi.");
@@ -123,7 +155,7 @@ export default function QuizQuestions() {
     setErreurForm(null);
 
     if (!quizId) return;
-    if ((type === 'video' || type === 'image') && !fichier) {
+    if (type !== 'text' && !fichier && !mediaKeyExistant) {
       setErreurForm('Ajoute un fichier avant d’enregistrer.');
       return;
     }
@@ -139,38 +171,51 @@ export default function QuizQuestions() {
 
     setEnregistrement(true);
     try {
-      let mediaKey: string | null = null;
-      if (type !== 'text') {
+      // Un nouveau fichier remplace l'ancien ; sinon, on garde le média existant
+      // (utile en modification si on ne veut changer que le texte ou les réponses).
+      let mediaKey: string | null = type === 'text' ? null : mediaKeyExistant;
+      if (fichier) {
         mediaKey = await televerserMedia();
       }
 
-      const { data: question, error: errQuestion } = await supabase
-        .from('questions')
-        .insert({
-          quiz_id: quizId,
-          type,
-          media_url: mediaKey,
-          text: texte,
-          explanation: explication || null,
-          order_index: questions.length,
-        })
-        .select('id')
-        .single();
+      let questionId = questionEnEditionId;
 
-      if (errQuestion || !question) {
-        throw new Error("L'enregistrement de la question a échoué.");
+      if (questionEnEditionId) {
+        const { error: errUpdate } = await supabase
+          .from('questions')
+          .update({ type, media_url: mediaKey, text: texte, explanation: explication || null })
+          .eq('id', questionEnEditionId);
+        if (errUpdate) throw new Error("La modification de la question a échoué.");
+
+        // Les réponses sont peu nombreuses : on efface puis on réinsère,
+        // plus simple et plus sûr qu'un diff précis.
+        await supabase.from('answer_options').delete().eq('question_id', questionEnEditionId);
+      } else {
+        const { data: question, error: errQuestion } = await supabase
+          .from('questions')
+          .insert({
+            quiz_id: quizId,
+            type,
+            media_url: mediaKey,
+            text: texte,
+            explanation: explication || null,
+            order_index: questions.length,
+          })
+          .select('id')
+          .single();
+
+        if (errQuestion || !question) throw new Error("L'enregistrement de la question a échoué.");
+        questionId = question.id;
       }
 
       const { error: errOptions } = await supabase.from('answer_options').insert(
         optionsRemplies.map((o) => ({
-          question_id: question.id,
+          question_id: questionId,
           text: o.text,
           is_correct: o.is_correct,
         }))
       );
-      if (errOptions) {
-        throw new Error("L'enregistrement des réponses a échoué.");
-      }
+      if (errOptions) throw new Error("L'enregistrement des réponses a échoué.");
 
       reinitialiserFormulaire();
       await charger();
@@ -183,6 +228,7 @@ export default function QuizQuestions() {
 
   async function supprimerQuestion(questionId: string) {
     await supabase.from('questions').delete().eq('id', questionId);
+    if (questionEnEditionId === questionId) reinitialiserFormulaire();
     await charger();
   }
 
@@ -199,7 +245,13 @@ export default function QuizQuestions() {
       {!loading && questions.length > 0 && (
         <ul className="flex flex-col gap-2 mb-6">
           {questions.map((q, i) => (
-            <li key={q.id} className="bg-surface border border-border rounded p-3">
+            <li
+              key={q.id}
+              className={
+                'bg-surface border rounded p-3 ' +
+                (questionEnEditionId === q.id ? 'border-pitch' : 'border-border')
+              }
+            >
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="text-xs text-muted mb-1">
@@ -211,13 +263,22 @@ export default function QuizQuestions() {
                     {q.answer_options.length}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => supprimerQuestion(q.id)}
-                  className="text-xs text-card-red shrink-0"
-                >
-                  Supprimer
-                </button>
+                <div className="flex gap-3 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => commencerEdition(q)}
+                    className="text-xs text-pitch font-medium"
+                  >
+                    Modifier
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => supprimerQuestion(q.id)}
+                    className="text-xs text-card-red"
+                  >
+                    Supprimer
+                  </button>
+                </div>
               </div>
             </li>
           ))}
@@ -225,7 +286,16 @@ export default function QuizQuestions() {
       )}
 
       <form onSubmit={enregistrerQuestion} className="bg-surface border border-border rounded p-4">
-        <p className="text-sm font-medium mb-3">Nouvelle question</p>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-medium">
+            {questionEnEditionId ? 'Modifier la question' : 'Nouvelle question'}
+          </p>
+          {questionEnEditionId && (
+            <button type="button" onClick={reinitialiserFormulaire} className="text-xs text-muted underline">
+              Annuler
+            </button>
+          )}
+        </div>
 
         <div className="flex gap-2 mb-4">
           {(['video', 'image', 'text'] as QuestionType[]).map((t) => (
@@ -235,6 +305,7 @@ export default function QuizQuestions() {
               onClick={() => {
                 setType(t);
                 choisirFichier(null);
+                setMediaKeyExistant(null);
               }}
               className={
                 'flex-1 text-sm rounded py-1.5 border ' +
@@ -250,6 +321,7 @@ export default function QuizQuestions() {
           <div className="mb-4">
             <label className="block text-sm text-muted mb-1">
               {type === 'video' ? 'Vidéo' : 'Image'}
+              {mediaKeyExistant && !fichier && ' (fichier actuel conservé si tu n’en choisis pas un nouveau)'}
             </label>
             <input
               type="file"
@@ -257,6 +329,7 @@ export default function QuizQuestions() {
               onChange={(e) => choisirFichier(e.target.files?.[0] ?? null)}
               className="w-full text-sm"
             />
+            {chargementApercu && <p className="text-xs text-muted mt-2">Chargement de l’aperçu…</p>}
             {apercu && type === 'image' && (
               <img src={apercu} alt="Aperçu" className="mt-2 rounded max-h-40" />
             )}
@@ -327,7 +400,11 @@ export default function QuizQuestions() {
           disabled={enregistrement}
           className="w-full bg-pitch text-white font-medium rounded py-2 disabled:opacity-60"
         >
-          {enregistrement ? 'Enregistrement…' : 'Enregistrer la question'}
+          {enregistrement
+            ? 'Enregistrement…'
+            : questionEnEditionId
+              ? 'Enregistrer les modifications'
+              : 'Enregistrer la question'}
         </button>
       </form>
     </AppLayout>
