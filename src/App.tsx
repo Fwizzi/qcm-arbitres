@@ -7,6 +7,7 @@ import Comptes from './pages/admin/Comptes';
 import Journal from './pages/admin/Journal';
 import Reglages from './pages/admin/Reglages';
 import FormateurDashboard from './pages/formateur/Dashboard';
+import QuizForm from './pages/formateur/QuizForm';
 import ArbitreAccueil from './pages/arbitre/Dashboard';
 
 function AccueilRedirect() {
@@ -59,6 +60,22 @@ export default function App() {
             element={
               <ProtectedRoute role="formateur">
                 <FormateurDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/formateur/qcm/nouveau"
+            element={
+              <ProtectedRoute role="formateur">
+                <QuizForm />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/formateur/qcm/:id"
+            element={
+              <ProtectedRoute role="formateur">
+                <QuizForm />
               </ProtectedRoute>
             }
           />
