@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import AppLayout from '../../components/AppLayout';
 import AdminNav from '../../components/AdminNav';
 import { supabase } from '../../lib/supabaseClient';
+import { extraireErreurFonction } from '../../lib/functionsError';
 import type { AppRole } from '../../hooks/useAuth';
 
 interface PersonneAvecRoles {
@@ -86,7 +87,7 @@ export default function Comptes() {
     setCreation(false);
 
     if (error || data?.error) {
-      setErreurCreation(data?.error ?? "La création a échoué. Réessaie dans un instant.");
+      setErreurCreation(await extraireErreurFonction(error, data));
       return;
     }
 
