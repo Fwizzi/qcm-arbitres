@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import AppLayout from '../../components/AppLayout';
 import AdminNav from '../../components/AdminNav';
 import { supabase } from '../../lib/supabaseClient';
@@ -24,6 +24,13 @@ export default function Comptes() {
   const [error, setError] = useState<string | null>(null);
   const [ouvert, setOuvert] = useState<string | null>(null);
   const [enregistrement, setEnregistrement] = useState(false);
+
+  const [formulaireOuvert, setFormulaireOuvert] = useState(false);
+  const [nomComplet, setNomComplet] = useState('');
+  const [email, setEmail] = useState('');
+  const [motDePasse, setMotDePasse] = useState('');
+  const [erreurCreation, setErreurCreation] = useState<string | null>(null);
+  const [creation, setCreation] = useState(false);
 
   async function charger() {
     setLoading(true);
@@ -67,6 +74,29 @@ export default function Comptes() {
     setEnregistrement(false);
   }
 
+  async function creerCompte(e: FormEvent) {
+    e.preventDefault();
+    setErreurCreation(null);
+    setCreation(true);
+
+    const { data, error } = await supabase.functions.invoke('create-user', {
+      body: { email, password: motDePasse, full_name: nomComplet },
+    });
+
+    setCreation(false);
+
+    if (error || data?.error) {
+      setErreurCreation(data?.error ?? "La création a échoué. Réessaie dans un instant.");
+      return;
+    }
+
+    setNomComplet('');
+    setEmail('');
+    setMotDePasse('');
+    setFormulaireOuvert(false);
+    await charger();
+  }
+
   function initiales(nom: string) {
     return nom
       .split(' ')
@@ -80,12 +110,66 @@ export default function Comptes() {
   return (
     <AppLayout>
       <AdminNav />
-      <h1 className="text-lg font-semibold mb-4">Comptes</h1>
-
-      <div className="bg-pitch-light text-pitch-dark text-sm rounded p-3 mb-4">
-        Pour ajouter quelqu'un : crée d'abord son compte dans Supabase (Authentication → Users →
-        Add user, en cochant « Auto Confirm User »), puis reviens ici pour lui attribuer un rôle.
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-lg font-semibold">Comptes</h1>
+        <button
+          type="button"
+          className="text-sm border border-border rounded px-3 py-1.5"
+          onClick={() => setFormulaireOuvert((v) => !v)}
+        >
+          + Nouveau
+        </button>
       </div>
+
+      {formulaireOuvert && (
+        <form onSubmit={creerCompte} className="bg-surface border border-border rounded p-4 mb-4">
+          <label className="block text-sm text-muted mb-1">Nom complet</label>
+          <input
+            type="text"
+            required
+            value={nomComplet}
+            onChange={(e) => setNomComplet(e.target.value)}
+            className="w-full border border-border rounded px-3 py-2 mb-3"
+          />
+
+          <label className="block text-sm text-muted mb-1">E-mail</label>
+          <input
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full border border-border rounded px-3 py-2 mb-3"
+          />
+
+          <label className="block text-sm text-muted mb-1">Mot de passe provisoire</label>
+          <input
+            type="text"
+            required
+            minLength={8}
+            value={motDePasse}
+            onChange={(e) => setMotDePasse(e.target.value)}
+            className="w-full border border-border rounded px-3 py-2 mb-1"
+          />
+          <p className="text-xs text-muted mb-3">
+            8 caractères minimum. Transmets-le à la personne concernée ; elle pourra le changer
+            une fois connectée.
+          </p>
+
+          {erreurCreation && (
+            <p role="alert" className="text-sm text-card-red bg-card-red-bg rounded px-3 py-2 mb-3">
+              {erreurCreation}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={creation}
+            className="w-full bg-pitch text-white font-medium rounded py-2 disabled:opacity-60"
+          >
+            {creation ? 'Création…' : 'Créer le compte'}
+          </button>
+        </form>
+      )}
 
       {loading && <p className="text-sm text-muted">Chargement…</p>}
       {error && <p className="text-sm text-card-red">{error}</p>}
