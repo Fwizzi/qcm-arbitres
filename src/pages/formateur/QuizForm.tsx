@@ -204,12 +204,20 @@ export default function QuizForm() {
       </div>
 
       {!estNouveau && (
-        <Link
-          to={`/formateur/qcm/${id}/questions`}
-          className="block w-full text-center border border-border rounded py-2 mb-3 text-sm"
-        >
-          Gérer les questions
-        </Link>
+        <>
+          <Link
+            to={`/formateur/qcm/${id}/questions`}
+            className="block w-full text-center border border-border rounded py-2 mb-2 text-sm"
+          >
+            Gérer les questions
+          </Link>
+          <Link
+            to={`/formateur/qcm/${id}/resultats`}
+            className="block w-full text-center border border-border rounded py-2 mb-3 text-sm"
+          >
+            Voir les résultats
+          </Link>
+        </>
       )}
 
       {erreur && (
