@@ -13,6 +13,9 @@ import QuizResultats from './pages/formateur/QuizResultats';
 import Groupes from './pages/formateur/Groupes';
 import GroupMembers from './pages/formateur/GroupMembers';
 import ArbitreAccueil from './pages/arbitre/Dashboard';
+import QuizAttempt from './pages/arbitre/QuizAttempt';
+import QuizAttemptResult from './pages/arbitre/QuizAttemptResult';
+import Historique from './pages/arbitre/Historique';
 
 function AccueilRedirect() {
   const { loading, session, roles } = useAuth();
@@ -120,6 +123,30 @@ export default function App() {
             element={
               <ProtectedRoute role="arbitre">
                 <ArbitreAccueil />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/arbitre/qcm/:id"
+            element={
+              <ProtectedRoute role="arbitre">
+                <QuizAttempt />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/arbitre/qcm/:id/resultat/:attemptId"
+            element={
+              <ProtectedRoute role="arbitre">
+                <QuizAttemptResult />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/arbitre/historique"
+            element={
+              <ProtectedRoute role="arbitre">
+                <Historique />
               </ProtectedRoute>
             }
           />
