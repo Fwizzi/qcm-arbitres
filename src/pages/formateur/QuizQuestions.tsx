@@ -18,7 +18,7 @@ interface QuestionRow {
   text: string;
   media_url: string | null;
   explanation: string | null;
-  answer_options: AnswerOption[];
+  options: AnswerOption[];
 }
 
 const TYPE_LABELS: Record<QuestionType, string> = {
@@ -55,11 +55,7 @@ export default function QuizQuestions() {
     setLoading(true);
     setErreurListe(null);
 
-    const { data, error } = await supabase
-      .from('questions')
-      .select('id, type, text, media_url, explanation, answer_options(id, text, is_correct)')
-      .eq('quiz_id', quizId)
-      .order('order_index');
+    const { data, error } = await supabase.rpc('get_editor_questions', { p_quiz_id: quizId });
 
     if (error) {
       setErreurListe('Impossible de charger les questions. Réessaie dans un instant.');
@@ -108,8 +104,8 @@ export default function QuizQuestions() {
     setTexte(q.text);
     setExplication(q.explanation ?? '');
     setOptions(
-      q.answer_options.length > 0
-        ? q.answer_options.map((o) => ({ id: o.id, text: o.text, is_correct: o.is_correct }))
+      q.options.length > 0
+        ? q.options.map((o) => ({ id: o.id, text: o.text, is_correct: o.is_correct }))
         : [nouvelleOption(), nouvelleOption()]
     );
     setFichier(null);
@@ -264,8 +260,8 @@ export default function QuizQuestions() {
                   </p>
                   <p className="text-sm font-medium">{q.text}</p>
                   <p className="text-xs text-muted mt-1">
-                    {q.answer_options.filter((o) => o.is_correct).length} bonne(s) réponse(s) sur{' '}
-                    {q.answer_options.length}
+                    {q.options.filter((o) => o.is_correct).length} bonne(s) réponse(s) sur{' '}
+                    {q.options.length}
                   </p>
                 </div>
                 <div className="flex gap-3 shrink-0">
