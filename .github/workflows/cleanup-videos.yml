@@ -1,0 +1,17 @@
+name: Nettoyer les vidéos expirées
+
+on:
+  schedule:
+    # Tous les jours à 3h du matin (heure UTC).
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Appeler la fonction de nettoyage
+        run: |
+          curl --fail --silent --show-error \
+            -X POST "${{ secrets.SUPABASE_FUNCTIONS_URL }}/cleanup-expired-videos" \
+            -H "x-cleanup-secret: ${{ secrets.CLEANUP_SECRET }}"
