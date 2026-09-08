@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
-import AdminDashboard from './pages/admin/Dashboard';
+import AdminDashboard from './pages/admin/Dashboard_admin';
 import Comptes from './pages/admin/Comptes';
 import Journal from './pages/admin/Journal';
 import Reglages from './pages/admin/Reglages';
