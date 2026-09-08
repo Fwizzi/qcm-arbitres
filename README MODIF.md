@@ -8,3 +8,4 @@ Notes de l'export doient être ne %
 Lorsqu'un groupe est partagé, celui qui le reçoit doit pouvoir voir les personnes de ce groupe en cliquant sur le groupe. Pour le modifier il faudra qu'il le duplique 
 Les QCM sont visibles même des arbitres n'étant pas dans la liste de diffusion (à modifier)
 Si le formateur à qui j'ai partagé le groupe, le supplique, il ne faut pas qu'il apparaisse chez moi SAUF s'il me le partage
+Dans l'onglet Arbitres, Historique, il faut débloquer l'accès à la correction du QCM (consultable le nombre de jour paramétré par l'administrateur
