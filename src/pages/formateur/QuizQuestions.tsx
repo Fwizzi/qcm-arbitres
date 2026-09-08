@@ -112,7 +112,11 @@ export default function QuizQuestions() {
     setApercu(null);
     setMediaKeyExistant(q.media_url);
 
-    if (q.media_url) {
+    if (q.media_url === '__deleted__') {
+      setErreurForm(
+        'La vidéo/image originale a été supprimée automatiquement (durée de conservation dépassée). Choisis-en une nouvelle pour la remplacer.'
+      );
+    } else if (q.media_url) {
       setChargementApercu(true);
       const { data, error } = await supabase.functions.invoke('r2-upload-url', {
         body: { action: 'read', key: q.media_url },
