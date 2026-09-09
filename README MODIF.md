@@ -1,5 +1,5 @@
 
-
+Ajouter la possibilité de supprimer un QCM non publié. Supprimer la possibilité de modifier un QCM publié
 Période d'accessibilité des QCM (date et heure)
 Améliorer la rapidité d'enregistrement des envois vidéo 
 ATTENTION il est possible de faire le QCM depuis deux interfaces différentes en même temps (ordinateur + Mobile par exemple)
