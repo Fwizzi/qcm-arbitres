@@ -11,3 +11,4 @@ Si le formateur à qui j'ai partagé le groupe, le supplique, il ne faut pas qu'
 Dans l'onglet Arbitres, Historique, il faut débloquer l'accès à la correction du QCM (consultable le nombre de jour paramétré par l'administrateur
 Pouvoir modifier les Mots de passe, les noms prénoms des comptes créés par l'admin
 Onglet arbitre : pouvoir modifier son mode de passe et lors de la première connexion pouvoir définir son propre mot de passe
+Pouvoir trier les actions du journal d'activité en fonction des personnes
