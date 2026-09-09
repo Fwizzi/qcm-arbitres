@@ -19,6 +19,7 @@ export default function Groupes() {
   const { session } = useAuth();
   const [groupes, setGroupes] = useState<GroupRow[]>([]);
   const [membres, setMembres] = useState<{ group_id: string; user_id: string }[]>([]);
+  const [profils, setProfils] = useState<ProfilLeger[]>([]);
   const [formateurs, setFormateurs] = useState<ProfilLeger[]>([]);
   const [partages, setPartages] = useState<{ group_id: string; shared_with_user_id: string }[]>([]);
 
@@ -27,6 +28,7 @@ export default function Groupes() {
   const [nomNouveauGroupe, setNomNouveauGroupe] = useState('');
   const [creation, setCreation] = useState(false);
   const [panneauPartageOuvert, setPanneauPartageOuvert] = useState<string | null>(null);
+  const [membresVisibles, setMembresVisibles] = useState<string | null>(null);
 
   async function charger() {
     setLoading(true);
@@ -37,11 +39,13 @@ export default function Groupes() {
       { data: membresData },
       { data: partagesData },
       { data: rolesFormateurs },
+      { data: profilsData },
     ] = await Promise.all([
       supabase.from('groups').select('id, name, formateur_id').order('name'),
       supabase.from('group_members').select('group_id, user_id'),
       supabase.from('group_shares').select('group_id, shared_with_user_id'),
       supabase.from('user_roles').select('user_id').eq('role', 'formateur'),
+      supabase.from('profiles').select('id, full_name'),
     ]);
 
     if (err1) {
@@ -53,19 +57,12 @@ export default function Groupes() {
     setGroupes(groupesData ?? []);
     setMembres(membresData ?? []);
     setPartages(partagesData ?? []);
+    setProfils(profilsData ?? []);
 
-    const idsFormateurs = (rolesFormateurs ?? [])
-      .map((r) => r.user_id)
-      .filter((id) => id !== session?.user.id);
-    if (idsFormateurs.length > 0) {
-      const { data: profils } = await supabase
-        .from('profiles')
-        .select('id, full_name')
-        .in('id', idsFormateurs);
-      setFormateurs(profils ?? []);
-    } else {
-      setFormateurs([]);
-    }
+    const idsFormateurs = new Set(
+      (rolesFormateurs ?? []).map((r) => r.user_id).filter((id) => id !== session?.user.id)
+    );
+    setFormateurs((profilsData ?? []).filter((p) => idsFormateurs.has(p.id)));
 
     setLoading(false);
   }
@@ -77,6 +74,13 @@ export default function Groupes() {
 
   function nombreMembres(groupId: string) {
     return membres.filter((m) => m.group_id === groupId).length;
+  }
+
+  function nomsMembres(groupId: string) {
+    return membres
+      .filter((m) => m.group_id === groupId)
+      .map((m) => profils.find((p) => p.id === m.user_id)?.full_name ?? '—')
+      .sort((a, b) => a.localeCompare(b));
   }
 
   function estPartageAvec(groupId: string, formateurId: string) {
@@ -226,6 +230,27 @@ export default function Groupes() {
                     {nombreMembres(g.id)} arbitre(s) · lecture seule
                   </span>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setMembresVisibles(membresVisibles === g.id ? null : g.id)}
+                  className="w-full text-xs border border-border rounded py-1.5 mb-2"
+                >
+                  {membresVisibles === g.id ? 'Masquer les membres' : 'Voir les membres'}
+                </button>
+
+                {membresVisibles === g.id && (
+                  <ul className="mb-2 text-sm">
+                    {nomsMembres(g.id).length === 0 && (
+                      <li className="text-xs text-muted">Ce groupe est vide.</li>
+                    )}
+                    {nomsMembres(g.id).map((nom, i) => (
+                      <li key={i} className="py-1 border-t border-border first:border-t-0">
+                        {nom}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
                 <button
                   type="button"
                   onClick={() => dupliquerGroupe(g)}
