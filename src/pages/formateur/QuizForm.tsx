@@ -17,6 +17,14 @@ function traduireErreur(message?: string): string {
   return "L'enregistrement a échoué. Vérifie les champs et réessaie.";
 }
 
+// Convertit un instant ISO (venant de la base) vers le format attendu par
+// <input type="datetime-local">, en heure locale du navigateur.
+function versDatetimeLocal(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export default function QuizForm() {
   const { id } = useParams();
   const estNouveau = !id || id === 'nouveau';
@@ -73,8 +81,8 @@ export default function QuizForm() {
         setTitre(quiz.title);
         setDureeMinutes(quiz.time_limit_minutes);
         setAfficherScore(quiz.show_score);
-        setDateDebut(quiz.period_start);
-        setDateFin(quiz.period_end);
+        setDateDebut(versDatetimeLocal(quiz.period_start));
+        setDateFin(versDatetimeLocal(quiz.period_end));
 
         const { data: qg } = await supabase.from('quiz_groups').select('group_id').eq('quiz_id', id);
         setGroupesSelectionnes(new Set((qg ?? []).map((r) => r.group_id)));
@@ -103,8 +111,8 @@ export default function QuizForm() {
       title: titre,
       time_limit_minutes: dureeMinutes,
       show_score: afficherScore,
-      period_start: dateDebut,
-      period_end: dateFin,
+      period_start: new Date(dateDebut).toISOString(),
+      period_end: new Date(dateFin).toISOString(),
       status: nouveauStatut,
     };
     if (nouveauStatut === 'published') {
@@ -188,21 +196,21 @@ export default function QuizForm() {
         Afficher le score à l'arbitre
       </label>
 
-      <label className="block text-sm text-muted mb-1">Période d'accessibilité</label>
-      <div className="flex gap-2 mb-4">
-        <div className="flex-1">
+      <label className="block text-sm text-muted mb-1">Période d'accessibilité (date et heure)</label>
+      <div className="flex flex-col gap-3 mb-4">
+        <div>
           <span className="text-xs text-muted">Du</span>
           <input
-            type="date"
+            type="datetime-local"
             value={dateDebut}
             onChange={(e) => setDateDebut(e.target.value)}
             className="w-full border border-border rounded px-3 py-2"
           />
         </div>
-        <div className="flex-1">
+        <div>
           <span className="text-xs text-muted">Au</span>
           <input
-            type="date"
+            type="datetime-local"
             value={dateFin}
             onChange={(e) => setDateFin(e.target.value)}
             className="w-full border border-border rounded px-3 py-2"
