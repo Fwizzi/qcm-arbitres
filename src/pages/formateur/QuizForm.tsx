@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams, Link } from 'react-router-dom';
+import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import AppLayout from '../../components/AppLayout';
 import { supabase } from '../../lib/supabaseClient';
 import { logActivity } from '../../lib/activityLog';
@@ -21,7 +21,10 @@ export default function QuizForm() {
   const { id } = useParams();
   const estNouveau = !id || id === 'nouveau';
   const navigate = useNavigate();
+  const location = useLocation();
   const { session } = useAuth();
+
+  const [confirmation, setConfirmation] = useState(false);
 
   const [titre, setTitre] = useState('');
   const [dureeMinutes, setDureeMinutes] = useState(20);
@@ -34,6 +37,20 @@ export default function QuizForm() {
   const [loading, setLoading] = useState(!estNouveau);
   const [erreur, setErreur] = useState<string | null>(null);
   const [enregistrement, setEnregistrement] = useState(false);
+
+  useEffect(() => {
+    if ((location.state as { justSaved?: boolean } | null)?.justSaved) {
+      setConfirmation(true);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.key]);
+
+  useEffect(() => {
+    if (!confirmation) return;
+    const t = setTimeout(() => setConfirmation(false), 4000);
+    return () => clearTimeout(t);
+  }, [confirmation]);
 
   useEffect(() => {
     async function charger() {
@@ -125,7 +142,7 @@ export default function QuizForm() {
     }
 
     setEnregistrement(false);
-    navigate(`/formateur/qcm/${quizId}`, { replace: true });
+    navigate(`/formateur/qcm/${quizId}`, { replace: true, state: { justSaved: true } });
   }
 
   if (loading) {
@@ -142,6 +159,12 @@ export default function QuizForm() {
         ← Mes QCM
       </Link>
       <h1 className="text-lg font-semibold mb-4">Paramètres du QCM</h1>
+
+      {confirmation && (
+        <p className="text-sm text-pitch-dark bg-pitch-light rounded px-3 py-2 mb-4">
+          QCM enregistré avec succès.
+        </p>
+      )}
 
       <label className="block text-sm text-muted mb-1">Titre</label>
       <input
