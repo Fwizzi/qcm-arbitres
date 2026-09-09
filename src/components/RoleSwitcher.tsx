@@ -11,8 +11,12 @@ export default function RoleSwitcher() {
   const { roles, activeRole, setActiveRole } = useAuth();
   const navigate = useNavigate();
 
-  // Un compte à rôle unique n'a pas besoin de sélecteur.
-  if (roles.length < 2) return null;
+  if (roles.length === 0) return null;
+
+  // Rôle unique : simple étiquette, pas besoin de bascule cliquable.
+  if (roles.length === 1) {
+    return <span className="text-sm font-medium text-ink">{LABELS[roles[0]]}</span>;
+  }
 
   function handleChange(role: AppRole) {
     setActiveRole(role);
