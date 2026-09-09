@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import AppLayout from '../../components/AppLayout';
 import { supabase } from '../../lib/supabaseClient';
+import { logActivity } from '../../lib/activityLog';
 
 interface LigneResultat {
   id: string;
@@ -140,6 +141,7 @@ export default function QuizResultats() {
     const { error } = await supabase.from('quizzes').delete().eq('id', quizId);
     setSuppression(false);
     if (!error) {
+      await logActivity(`a supprimé le QCM « ${titre} »`, 'quiz', quizId);
       navigate('/formateur');
     } else {
       setErreur('La suppression a échoué. Réessaie dans un instant.');

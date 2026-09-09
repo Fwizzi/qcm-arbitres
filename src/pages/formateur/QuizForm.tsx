@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import AppLayout from '../../components/AppLayout';
 import { supabase } from '../../lib/supabaseClient';
+import { logActivity } from '../../lib/activityLog';
 import { useAuth } from '../../hooks/useAuth';
 
 interface GroupRow {
@@ -103,6 +104,7 @@ export default function QuizForm() {
         return;
       }
       quizId = data.id;
+      await logActivity(`a créé le QCM « ${titre} »`, 'quiz', quizId);
     } else {
       const { error } = await supabase.from('quizzes').update(payload).eq('id', id);
       if (error) {
@@ -110,6 +112,7 @@ export default function QuizForm() {
         setEnregistrement(false);
         return;
       }
+      await logActivity(`a modifié le QCM « ${titre} »`, 'quiz', id);
     }
 
     // Resynchronise les groupes cibles : on efface puis on réinsère,
