@@ -3,6 +3,7 @@ import AppLayout from '../../components/AppLayout';
 import AdminNav from '../../components/AdminNav';
 import { supabase } from '../../lib/supabaseClient';
 import { extraireErreurFonction } from '../../lib/functionsError';
+import { logActivity } from '../../lib/activityLog';
 import type { AppRole } from '../../hooks/useAuth';
 
 interface PersonneAvecRoles {
@@ -95,6 +96,7 @@ export default function Comptes() {
     setEmail('');
     setMotDePasse('');
     setFormulaireOuvert(false);
+    await logActivity(`a créé le compte de ${nomComplet}`, 'profile', data?.id);
     await charger();
   }
 
