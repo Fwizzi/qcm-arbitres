@@ -28,6 +28,9 @@ export default function Groupes() {
   const [nomNouveauGroupe, setNomNouveauGroupe] = useState('');
   const [creation, setCreation] = useState(false);
   const [panneauPartageOuvert, setPanneauPartageOuvert] = useState<string | null>(null);
+  const [confirmationSuppression, setConfirmationSuppression] = useState<string | null>(null);
+  const [suppression, setSuppression] = useState(false);
+  const [erreurSuppression, setErreurSuppression] = useState<string | null>(null);
   const [membresVisibles, setMembresVisibles] = useState<string | null>(null);
 
   async function charger() {
@@ -132,6 +135,19 @@ export default function Groupes() {
     await charger();
   }
 
+  async function supprimerGroupe(groupId: string) {
+    setSuppression(true);
+    setErreurSuppression(null);
+    const { error } = await supabase.from('groups').delete().eq('id', groupId);
+    setSuppression(false);
+    if (error) {
+      setErreurSuppression(error.message);
+    } else {
+      setConfirmationSuppression(null);
+      await charger();
+    }
+  }
+
   if (loading) {
     return (
       <AppLayout>
@@ -192,7 +208,46 @@ export default function Groupes() {
               >
                 Partager
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setErreurSuppression(null);
+                  setConfirmationSuppression(confirmationSuppression === g.id ? null : g.id);
+                }}
+                className="flex-1 text-xs border border-border rounded py-1.5 text-card-red"
+              >
+                Supprimer
+              </button>
             </div>
+
+            {confirmationSuppression === g.id && (
+              <div className="mt-3 pt-3 border-t border-border">
+                {erreurSuppression ? (
+                  <p className="text-xs text-card-red">{erreurSuppression}</p>
+                ) : (
+                  <>
+                    <p className="text-sm mb-2">Confirmer la suppression de ce groupe ?</p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setConfirmationSuppression(null)}
+                        className="flex-1 border border-border rounded py-1.5 text-xs"
+                      >
+                        Annuler
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => supprimerGroupe(g.id)}
+                        disabled={suppression}
+                        className="flex-1 bg-card-red text-white rounded py-1.5 text-xs disabled:opacity-60"
+                      >
+                        {suppression ? 'Suppression…' : 'Supprimer'}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
 
             {panneauPartageOuvert === g.id && (
               <div className="mt-3 pt-3 border-t border-border">
