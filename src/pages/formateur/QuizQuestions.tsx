@@ -35,6 +35,7 @@ export default function QuizQuestions() {
   const { id: quizId } = useParams();
 
   const [questions, setQuestions] = useState<QuestionRow[]>([]);
+  const [statutQcm, setStatutQcm] = useState<'draft' | 'published' | null>(null);
   const [loading, setLoading] = useState(true);
   const [erreurListe, setErreurListe] = useState<string | null>(null);
 
@@ -55,7 +56,11 @@ export default function QuizQuestions() {
     setLoading(true);
     setErreurListe(null);
 
-    const { data, error } = await supabase.rpc('get_editor_questions', { p_quiz_id: quizId });
+    const [{ data, error }, { data: quiz }] = await Promise.all([
+      supabase.rpc('get_editor_questions', { p_quiz_id: quizId }),
+      supabase.from('quizzes').select('status').eq('id', quizId).single(),
+    ]);
+    setStatutQcm(quiz?.status ?? null);
 
     if (error) {
       setErreurListe('Impossible de charger les questions. Réessaie dans un instant.');
@@ -268,28 +273,35 @@ export default function QuizQuestions() {
                     {q.options.length}
                   </p>
                 </div>
-                <div className="flex gap-3 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => commencerEdition(q)}
-                    className="text-xs text-pitch font-medium"
-                  >
-                    Modifier
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => supprimerQuestion(q.id)}
-                    className="text-xs text-card-red"
-                  >
-                    Supprimer
-                  </button>
-                </div>
+                {statutQcm !== 'published' && (
+                  <div className="flex gap-3 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => commencerEdition(q)}
+                      className="text-xs text-pitch font-medium"
+                    >
+                      Modifier
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => supprimerQuestion(q.id)}
+                      className="text-xs text-card-red"
+                    >
+                      Supprimer
+                    </button>
+                  </div>
+                )}
               </div>
             </li>
           ))}
         </ul>
       )}
 
+      {statutQcm === 'published' ? (
+        <p className="text-sm text-card-yellow bg-card-yellow-bg rounded px-3 py-2">
+          Ce QCM est publié : les questions ne peuvent plus être modifiées.
+        </p>
+      ) : (
       <form onSubmit={enregistrerQuestion} className="bg-surface border border-border rounded p-4">
         <div className="flex items-center justify-between mb-3">
           <p className="text-sm font-medium">
@@ -412,6 +424,7 @@ export default function QuizQuestions() {
               : 'Enregistrer la question'}
         </button>
       </form>
+      )}
     </AppLayout>
   );
 }

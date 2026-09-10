@@ -35,6 +35,7 @@ export default function QuizForm() {
   const [confirmation, setConfirmation] = useState(false);
 
   const [titre, setTitre] = useState('');
+  const [statut, setStatut] = useState<'draft' | 'published' | null>(null);
   const [dureeMinutes, setDureeMinutes] = useState(20);
   const [afficherScore, setAfficherScore] = useState(true);
   const [dateDebut, setDateDebut] = useState('');
@@ -45,6 +46,10 @@ export default function QuizForm() {
   const [loading, setLoading] = useState(!estNouveau);
   const [erreur, setErreur] = useState<string | null>(null);
   const [enregistrement, setEnregistrement] = useState(false);
+  const [confirmationSuppression, setConfirmationSuppression] = useState(false);
+  const [suppression, setSuppression] = useState(false);
+
+  const estPublie = statut === 'published';
 
   useEffect(() => {
     if ((location.state as { justSaved?: boolean } | null)?.justSaved) {
@@ -68,7 +73,7 @@ export default function QuizForm() {
       if (!estNouveau && id) {
         const { data: quiz, error } = await supabase
           .from('quizzes')
-          .select('title, time_limit_minutes, show_score, period_start, period_end')
+          .select('title, status, time_limit_minutes, show_score, period_start, period_end')
           .eq('id', id)
           .single();
 
@@ -79,6 +84,7 @@ export default function QuizForm() {
         }
 
         setTitre(quiz.title);
+        setStatut(quiz.status);
         setDureeMinutes(quiz.time_limit_minutes);
         setAfficherScore(quiz.show_score);
         setDateDebut(versDatetimeLocal(quiz.period_start));
@@ -153,6 +159,19 @@ export default function QuizForm() {
     navigate(`/formateur/qcm/${quizId}`, { replace: true, state: { justSaved: true } });
   }
 
+  async function supprimerBrouillon() {
+    if (!id) return;
+    setSuppression(true);
+    const { error } = await supabase.from('quizzes').delete().eq('id', id);
+    setSuppression(false);
+    if (!error) {
+      await logActivity(`a supprimé le brouillon « ${titre} »`, 'quiz', id);
+      navigate('/formateur');
+    } else {
+      setErreur('La suppression a échoué. Réessaie dans un instant.');
+    }
+  }
+
   if (loading) {
     return (
       <AppLayout>
@@ -174,12 +193,19 @@ export default function QuizForm() {
         </p>
       )}
 
+      {estPublie && (
+        <p className="text-sm text-card-yellow bg-card-yellow-bg rounded px-3 py-2 mb-4">
+          Ce QCM est publié : ses paramètres et ses questions ne peuvent plus être modifiés.
+        </p>
+      )}
+
       <label className="block text-sm text-muted mb-1">Titre</label>
       <input
         type="text"
         value={titre}
+        disabled={estPublie}
         onChange={(e) => setTitre(e.target.value)}
-        className="w-full border border-border rounded px-3 py-2 mb-4"
+        className="w-full border border-border rounded px-3 py-2 mb-4 disabled:bg-canvas disabled:text-muted"
       />
 
       <label className="block text-sm text-muted mb-1">Limite de temps (minutes)</label>
@@ -187,12 +213,13 @@ export default function QuizForm() {
         type="number"
         min={1}
         value={dureeMinutes}
+        disabled={estPublie}
         onChange={(e) => setDureeMinutes(Number(e.target.value))}
-        className="w-28 border border-border rounded px-3 py-2 mb-4"
+        className="w-28 border border-border rounded px-3 py-2 mb-4 disabled:bg-canvas disabled:text-muted"
       />
 
       <label className="flex items-center gap-2 text-sm mb-4 py-2 border-y border-border">
-        <input type="checkbox" checked={afficherScore} onChange={(e) => setAfficherScore(e.target.checked)} />
+        <input type="checkbox" checked={afficherScore} disabled={estPublie} onChange={(e) => setAfficherScore(e.target.checked)} />
         Afficher le score à l'arbitre
       </label>
 
@@ -203,8 +230,9 @@ export default function QuizForm() {
           <input
             type="datetime-local"
             value={dateDebut}
+            disabled={estPublie}
             onChange={(e) => setDateDebut(e.target.value)}
-            className="w-full border border-border rounded px-3 py-2"
+            className="w-full border border-border rounded px-3 py-2 disabled:bg-canvas disabled:text-muted"
           />
         </div>
         <div>
@@ -212,8 +240,9 @@ export default function QuizForm() {
           <input
             type="datetime-local"
             value={dateFin}
+            disabled={estPublie}
             onChange={(e) => setDateFin(e.target.value)}
-            className="w-full border border-border rounded px-3 py-2"
+            className="w-full border border-border rounded px-3 py-2 disabled:bg-canvas disabled:text-muted"
           />
         </div>
       </div>
@@ -230,6 +259,7 @@ export default function QuizForm() {
             <input
               type="checkbox"
               checked={groupesSelectionnes.has(g.id)}
+              disabled={estPublie}
               onChange={() => basculerGroupe(g.id)}
             />
             {g.name}
@@ -260,24 +290,61 @@ export default function QuizForm() {
         </p>
       )}
 
-      <div className="flex gap-2">
-        <button
-          type="button"
-          disabled={enregistrement || !titre || !dateDebut || !dateFin}
-          onClick={() => enregistrer('draft')}
-          className="flex-1 border border-border rounded py-2 text-sm disabled:opacity-60"
-        >
-          Enregistrer le brouillon
-        </button>
-        <button
-          type="button"
-          disabled={enregistrement || !titre || !dateDebut || !dateFin}
-          onClick={() => enregistrer('published')}
-          className="flex-1 bg-pitch text-white font-medium rounded py-2 text-sm disabled:opacity-60"
-        >
-          Publier
-        </button>
-      </div>
+      {!estPublie && (
+        <div className="flex gap-2 mb-3">
+          <button
+            type="button"
+            disabled={enregistrement || !titre || !dateDebut || !dateFin}
+            onClick={() => enregistrer('draft')}
+            className="flex-1 border border-border rounded py-2 text-sm disabled:opacity-60"
+          >
+            Enregistrer le brouillon
+          </button>
+          <button
+            type="button"
+            disabled={enregistrement || !titre || !dateDebut || !dateFin}
+            onClick={() => enregistrer('published')}
+            className="flex-1 bg-pitch text-white font-medium rounded py-2 text-sm disabled:opacity-60"
+          >
+            Publier
+          </button>
+        </div>
+      )}
+
+      {!estNouveau && !estPublie && (
+        <>
+          {!confirmationSuppression ? (
+            <button
+              type="button"
+              onClick={() => setConfirmationSuppression(true)}
+              className="w-full border border-border rounded py-2 text-sm text-card-red"
+            >
+              Supprimer ce brouillon
+            </button>
+          ) : (
+            <div className="border border-card-red rounded p-3">
+              <p className="text-sm font-medium mb-3">Confirmer la suppression du brouillon ?</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmationSuppression(false)}
+                  className="flex-1 border border-border rounded py-2 text-sm"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  onClick={supprimerBrouillon}
+                  disabled={suppression}
+                  className="flex-1 bg-card-red text-white rounded py-2 text-sm disabled:opacity-60"
+                >
+                  {suppression ? 'Suppression…' : 'Supprimer'}
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </AppLayout>
   );
 }
