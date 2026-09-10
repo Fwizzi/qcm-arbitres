@@ -17,7 +17,6 @@ export default function QuizResultats() {
   const navigate = useNavigate();
 
   const [titre, setTitre] = useState('');
-  const [nombreQuestions, setNombreQuestions] = useState(0);
   const [lignes, setLignes] = useState<LigneResultat[]>([]);
   const [loading, setLoading] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -40,12 +39,6 @@ export default function QuizResultats() {
       return;
     }
     setTitre(quiz.title);
-
-    const { count } = await supabase
-      .from('questions')
-      .select('id', { count: 'exact', head: true })
-      .eq('quiz_id', quizId);
-    setNombreQuestions(count ?? 0);
 
     const { data: quizGroups } = await supabase.from('quiz_groups').select('group_id').eq('quiz_id', quizId);
     const groupIds = (quizGroups ?? []).map((g) => g.group_id);
@@ -95,15 +88,19 @@ export default function QuizResultats() {
   const repondus = lignes.filter((l) => l.statut === 'soumis');
   const scoreMoyen =
     repondus.length > 0
-      ? (repondus.reduce((s, l) => s + (l.score ?? 0), 0) / repondus.length).toFixed(1)
+      ? repondus.reduce((s, l) => s + (l.score ?? 0), 0) / repondus.length
       : null;
+
+  function formatPourcentage(n: number) {
+    return Number.isInteger(n) ? `${n} %` : `${n.toFixed(1)} %`;
+  }
 
   function donneesExport() {
     return lignes.map((l) => ({
       Nom: l.full_name,
       'E-mail': l.email,
       Statut: l.statut === 'soumis' ? 'Répondu' : l.statut === 'en_cours' ? 'En cours' : 'Non répondu',
-      Score: l.score !== null ? `${l.score} / ${nombreQuestions}` : '',
+      Score: l.score !== null ? formatPourcentage(l.score) : '',
     }));
   }
 
@@ -164,7 +161,7 @@ export default function QuizResultats() {
       <h1 className="text-lg font-semibold mb-1">{titre}</h1>
       <p className="text-sm text-muted mb-4">
         {repondus.length}/{lignes.length} répondus
-        {scoreMoyen !== null && ` · Score moyen ${scoreMoyen}/${nombreQuestions}`}
+        {scoreMoyen !== null && ` · Score moyen ${formatPourcentage(scoreMoyen)}`}
       </p>
 
       {erreur && <p className="text-sm text-card-red mb-4">{erreur}</p>}
@@ -202,7 +199,7 @@ export default function QuizResultats() {
             </span>
             {l.statut === 'soumis' && (
               <span className="text-sm font-medium">
-                {l.score} / {nombreQuestions}
+                {formatPourcentage(l.score ?? 0)}
               </span>
             )}
             {l.statut === 'en_cours' && <span className="text-xs text-card-yellow">En cours</span>}
