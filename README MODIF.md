@@ -1,4 +1,4 @@
-
+Il faut ajouter la possibilité de supprimer un groupe uniquement s'il n'est pas utilisé lors d'un QCM actuellement publié
 Lorsque le QCM est expiré ou actif publié, lorsque le Formateur clique dessus sur l'onglet QCM il doit directement être dirigé à la page "voir les résultats" sans passer par les paramètres du QCM.
 Améliorer la rapidité d'enregistrement des envois vidéo 
 ATTENTION il est possible de faire le QCM depuis deux interfaces différentes en même temps (ordinateur + Mobile par exemple)
