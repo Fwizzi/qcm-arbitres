@@ -7,6 +7,7 @@ interface LigneDetail {
   question_id: string;
   question_text: string;
   explanation: string | null;
+  question_score: number;
   option_id: string;
   option_text: string;
   is_correct: boolean;
@@ -16,7 +17,11 @@ interface QuestionGroupee {
   id: string;
   text: string;
   explanation: string | null;
-  correcte: boolean;
+  score: number;
+}
+
+function formatPourcentage(n: number) {
+  return Number.isInteger(n) ? `${n} %` : `${n.toFixed(1)} %`;
 }
 
 export default function QuizAttemptResult() {
@@ -24,7 +29,6 @@ export default function QuizAttemptResult() {
   const [titre, setTitre] = useState('');
   const [showScore, setShowScore] = useState(false);
   const [score, setScore] = useState<number | null>(null);
-  const [totalQuestions, setTotalQuestions] = useState(0);
   const [questions, setQuestions] = useState<QuestionGroupee[]>([]);
   const [loading, setLoading] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -50,18 +54,12 @@ export default function QuizAttemptResult() {
         .single();
       setScore(attempt?.score ?? null);
 
-      const { count } = await supabase
-        .from('questions')
-        .select('id', { count: 'exact', head: true })
-        .eq('quiz_id', quizId);
-      setTotalQuestions(count ?? 0);
-
       if (quiz?.show_score) {
         const { data: detail, error } = await supabase.rpc('get_exam_results', {
           p_attempt_id: attemptId,
         });
         if (error) {
-          setErreur("Impossible de charger le détail des réponses.");
+          setErreur('Impossible de charger le détail des réponses.');
         } else {
           const parQuestion = new Map<string, LigneDetail[]>();
           for (const ligne of (detail ?? []) as LigneDetail[]) {
@@ -72,7 +70,7 @@ export default function QuizAttemptResult() {
             id,
             text: lignes[0].question_text,
             explanation: lignes[0].explanation,
-            correcte: lignes.every((l) => l.is_correct === l.was_selected),
+            score: lignes[0].question_score,
           }));
           setQuestions(groupees);
         }
@@ -101,31 +99,35 @@ export default function QuizAttemptResult() {
         <>
           <div className="bg-surface border border-border rounded p-5 text-center mb-6">
             <p className="text-sm text-muted mb-1">Ton score</p>
-            <p className="text-3xl font-semibold">
-              {score} / {totalQuestions}
-            </p>
+            <p className="text-3xl font-semibold">{score !== null ? formatPourcentage(score) : '—'}</p>
           </div>
 
           {erreur && <p className="text-sm text-card-red mb-4">{erreur}</p>}
 
           <p className="text-sm text-muted mb-2">Détail des réponses</p>
           <ul className="flex flex-col gap-2">
-            {questions.map((q) => (
-              <li
-                key={q.id}
-                className={`border rounded p-3 ${q.correcte ? 'border-pitch' : 'border-card-red'}`}
-              >
-                <p className="text-sm mb-1">
-                  <span className={q.correcte ? 'text-pitch-dark' : 'text-card-red'}>
-                    {q.correcte ? '✓' : '✕'}
-                  </span>{' '}
-                  {q.text}
-                </p>
-                {!q.correcte && q.explanation && (
-                  <p className="text-xs text-muted pl-4">Explication : {q.explanation}</p>
-                )}
-              </li>
-            ))}
+            {questions.map((q) => {
+              const pleinementCorrecte = q.score >= 100;
+              return (
+                <li
+                  key={q.id}
+                  className={`border rounded p-3 ${pleinementCorrecte ? 'border-pitch' : 'border-card-red'}`}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <p className="text-sm">
+                      <span className={pleinementCorrecte ? 'text-pitch-dark' : 'text-card-red'}>
+                        {pleinementCorrecte ? '✓' : '✕'}
+                      </span>{' '}
+                      {q.text}
+                    </p>
+                    <span className="text-xs font-medium shrink-0">{formatPourcentage(q.score)}</span>
+                  </div>
+                  {!pleinementCorrecte && q.explanation && (
+                    <p className="text-xs text-muted pl-4">Explication : {q.explanation}</p>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </>
       ) : (

@@ -20,6 +20,7 @@ export default function QuizAttempt() {
   const navigate = useNavigate();
 
   const [titre, setTitre] = useState('');
+  const [afficherNombreAttendu, setAfficherNombreAttendu] = useState(true);
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [dateLimite, setDateLimite] = useState<number | null>(null);
   const [questions, setQuestions] = useState<QuestionExamen[]>([]);
@@ -48,7 +49,7 @@ export default function QuizAttempt() {
 
       const { data: quiz, error: errQuiz } = await supabase
         .from('quizzes')
-        .select('title, time_limit_minutes')
+        .select('title, time_limit_minutes, show_expected_count')
         .eq('id', quizId)
         .single();
       if (errQuiz || !quiz) {
@@ -57,6 +58,7 @@ export default function QuizAttempt() {
         return;
       }
       setTitre(quiz.title);
+      setAfficherNombreAttendu(quiz.show_expected_count);
 
       const { data: attempt, error: errAttempt } = await supabase
         .from('quiz_attempts')
@@ -149,7 +151,7 @@ export default function QuizAttempt() {
     if (actuel.has(optionId)) {
       actuel.delete(optionId);
     } else {
-      if (actuel.size >= max) return; // limite atteinte, on ignore le clic
+      if (afficherNombreAttendu && actuel.size >= max) return; // limite atteinte, on ignore le clic
       actuel.add(optionId);
     }
     setSelections((prev) => ({ ...prev, [questionId]: actuel }));
@@ -230,9 +232,11 @@ export default function QuizAttempt() {
       )}
 
       <p className="text-base font-medium mb-1">{questionActuelle.text}</p>
-      <p className="text-xs text-muted mb-4">
-        Choisis jusqu'à {questionActuelle.max_selectable} réponse(s)
-      </p>
+      {afficherNombreAttendu && (
+        <p className="text-xs text-muted mb-4">
+          Choisis jusqu'à {questionActuelle.max_selectable} réponse(s)
+        </p>
+      )}
 
       <div className="flex flex-col gap-2 mb-6">
         {questionActuelle.options.map((o) => (

@@ -99,7 +99,11 @@ export default function Historique() {
                   Répondu le {new Date(l.submitted_at).toLocaleDateString('fr-FR')}
                 </p>
               </div>
-              {l.score !== null && <span className="text-sm font-medium">{l.score}</span>}
+              {l.score !== null && (
+                <span className="text-sm font-medium">
+                  {Number.isInteger(l.score) ? l.score : l.score.toFixed(1)} %
+                </span>
+              )}
             </Link>
           </li>
         ))}
