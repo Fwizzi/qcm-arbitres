@@ -44,14 +44,21 @@ function formatDate(d: string) {
   });
 }
 
-// Code couleur d'une réponse :
-// bonne réponse cochée -> vert ; bonne réponse oubliée -> jaune ;
-// mauvaise réponse cochée -> rouge ; le reste -> neutre.
-function styleOption(o: OptionAffichee) {
-  if (o.is_correct && o.was_selected) return 'border-pitch bg-pitch-light';
-  if (o.is_correct && !o.was_selected) return 'border-card-yellow bg-card-yellow-bg';
-  if (!o.is_correct && o.was_selected) return 'border-card-red bg-card-red-bg';
-  return 'border-border';
+// Code couleur + mention textuelle d'une réponse :
+// bonne réponse cochée -> vert "Correct" ; bonne réponse oubliée ->
+// jaune "Manquante" ; mauvaise réponse cochée -> rouge "Incorrect" ;
+// le reste -> neutre, sans mention.
+function statutOption(o: OptionAffichee): { classe: string; label: string | null; couleurTexte: string } {
+  if (o.is_correct && o.was_selected) {
+    return { classe: 'border-pitch bg-pitch-light', label: 'Correct', couleurTexte: 'text-pitch-dark' };
+  }
+  if (o.is_correct && !o.was_selected) {
+    return { classe: 'border-card-yellow bg-card-yellow-bg', label: 'Manquante', couleurTexte: 'text-card-yellow' };
+  }
+  if (!o.is_correct && o.was_selected) {
+    return { classe: 'border-card-red bg-card-red-bg', label: 'Incorrect', couleurTexte: 'text-card-red' };
+  }
+  return { classe: 'border-border', label: null, couleurTexte: 'text-muted' };
 }
 
 export default function QuizAttemptResult() {
@@ -209,15 +216,23 @@ export default function QuizAttemptResult() {
                   )}
 
                   <div className="flex flex-col gap-1.5 mb-2">
-                    {q.options.map((o) => (
-                      <div
-                        key={o.id}
-                        className={`flex items-center gap-2 border rounded px-3 py-2 text-sm ${styleOption(o)}`}
-                      >
-                        <input type="checkbox" checked={o.was_selected} disabled readOnly />
-                        {o.text}
-                      </div>
-                    ))}
+                    {q.options.map((o) => {
+                      const statut = statutOption(o);
+                      return (
+                        <div
+                          key={o.id}
+                          className={`flex items-center gap-2 border rounded px-3 py-2 text-sm ${statut.classe}`}
+                        >
+                          <input type="checkbox" checked={o.was_selected} disabled readOnly />
+                          <span className="flex-1">{o.text}</span>
+                          {statut.label && (
+                            <span className={`text-xs font-medium shrink-0 ${statut.couleurTexte}`}>
+                              {statut.label}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
 
                   {q.explanation && <p className="text-xs text-muted">Explication : {q.explanation}</p>}
