@@ -1,8 +1,10 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import ProtectedRoute from './components/ProtectedRoute';
+import RequireAuth from './components/RequireAuth';
 import Login from './pages/Login';
-import AdminDashboard from './pages/admin/Dashboard_admin';
+import MonProfil from './pages/MonProfil';
+import AdminDashboard from './pages/admin/Dashboard';
 import Comptes from './pages/admin/Comptes';
 import Journal from './pages/admin/Journal';
 import Reglages from './pages/admin/Reglages';
@@ -30,6 +32,14 @@ export default function App() {
       <BrowserRouter basename="/qcm-arbitres">
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route
+            path="/mon-profil"
+            element={
+              <RequireAuth>
+                <MonProfil />
+              </RequireAuth>
+            }
+          />
           <Route
             path="/admin"
             element={
