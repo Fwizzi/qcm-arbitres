@@ -5,6 +5,8 @@ import { supabase } from '../../lib/supabaseClient';
 
 interface LigneDetail {
   question_id: string;
+  question_type: 'video' | 'image' | 'text';
+  media_url: string | null;
   question_text: string;
   explanation: string | null;
   question_score: number;
@@ -15,6 +17,8 @@ interface LigneDetail {
 }
 interface QuestionGroupee {
   id: string;
+  type: 'video' | 'image' | 'text';
+  media_url: string | null;
   text: string;
   explanation: string | null;
   score: number;
@@ -23,29 +27,35 @@ interface QuestionGroupee {
 function formatPourcentage(n: number) {
   return Number.isInteger(n) ? `${n} %` : `${n.toFixed(1)} %`;
 }
+function formatDate(d: string) {
+  return new Date(d).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
 
 export default function QuizAttemptResult() {
   const { id: quizId, attemptId } = useParams();
   const [titre, setTitre] = useState('');
   const [showScore, setShowScore] = useState(false);
+  const [periodeFin, setPeriodeFin] = useState<string | null>(null);
   const [score, setScore] = useState<number | null>(null);
   const [questions, setQuestions] = useState<QuestionGroupee[]>([]);
+  const [correctionIndisponible, setCorrectionIndisponible] = useState<string | null>(null);
+  const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
+  const [chargementMedia, setChargementMedia] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [erreur, setErreur] = useState<string | null>(null);
 
   useEffect(() => {
     async function charger() {
       if (!quizId || !attemptId) return;
       setLoading(true);
-      setErreur(null);
 
       const { data: quiz } = await supabase
         .from('quizzes')
-        .select('title, show_score')
+        .select('title, show_score, period_end')
         .eq('id', quizId)
         .single();
       setTitre(quiz?.title ?? '');
       setShowScore(quiz?.show_score ?? false);
+      setPeriodeFin(quiz?.period_end ?? null);
 
       const { data: attempt } = await supabase
         .from('quiz_attempts')
@@ -59,7 +69,7 @@ export default function QuizAttemptResult() {
           p_attempt_id: attemptId,
         });
         if (error) {
-          setErreur('Impossible de charger le détail des réponses.');
+          setCorrectionIndisponible(error.message);
         } else {
           const parQuestion = new Map<string, LigneDetail[]>();
           for (const ligne of (detail ?? []) as LigneDetail[]) {
@@ -68,6 +78,8 @@ export default function QuizAttemptResult() {
           }
           const groupees: QuestionGroupee[] = Array.from(parQuestion.entries()).map(([id, lignes]) => ({
             id,
+            type: lignes[0].question_type,
+            media_url: lignes[0].media_url,
             text: lignes[0].question_text,
             explanation: lignes[0].explanation,
             score: lignes[0].question_score,
@@ -79,6 +91,18 @@ export default function QuizAttemptResult() {
     }
     charger();
   }, [quizId, attemptId]);
+
+  async function afficherMedia(question: QuestionGroupee) {
+    if (!question.media_url || mediaUrls[question.id]) return;
+    setChargementMedia(question.id);
+    const { data } = await supabase.functions.invoke('r2-upload-url', {
+      body: { action: 'read', key: question.media_url },
+    });
+    if (data?.readUrl) {
+      setMediaUrls((prev) => ({ ...prev, [question.id]: data.readUrl }));
+    }
+    setChargementMedia(null);
+  }
 
   if (loading) {
     return (
@@ -102,33 +126,67 @@ export default function QuizAttemptResult() {
             <p className="text-3xl font-semibold">{score !== null ? formatPourcentage(score) : '—'}</p>
           </div>
 
-          {erreur && <p className="text-sm text-card-red mb-4">{erreur}</p>}
+          <p className="text-sm text-muted mb-2">Correction détaillée</p>
 
-          <p className="text-sm text-muted mb-2">Détail des réponses</p>
-          <ul className="flex flex-col gap-2">
-            {questions.map((q) => {
-              const pleinementCorrecte = q.score >= 100;
-              return (
-                <li
-                  key={q.id}
-                  className={`border rounded p-3 ${pleinementCorrecte ? 'border-pitch' : 'border-card-red'}`}
-                >
-                  <div className="flex items-start justify-between gap-2 mb-1">
-                    <p className="text-sm">
-                      <span className={pleinementCorrecte ? 'text-pitch-dark' : 'text-card-red'}>
-                        {pleinementCorrecte ? '✓' : '✕'}
-                      </span>{' '}
-                      {q.text}
-                    </p>
-                    <span className="text-xs font-medium shrink-0">{formatPourcentage(q.score)}</span>
-                  </div>
-                  {!pleinementCorrecte && q.explanation && (
-                    <p className="text-xs text-muted pl-4">Explication : {q.explanation}</p>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+          {correctionIndisponible ? (
+            <p className="text-sm text-muted bg-surface border border-border rounded px-3 py-3">
+              {correctionIndisponible}
+              {periodeFin && correctionIndisponible.includes('après la fin') && (
+                <> ({formatDate(periodeFin)})</>
+              )}
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {questions.map((q) => {
+                const pleinementCorrecte = q.score >= 100;
+                return (
+                  <li
+                    key={q.id}
+                    className={`border rounded p-3 ${pleinementCorrecte ? 'border-pitch' : 'border-card-red'}`}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <p className="text-sm">
+                        <span className={pleinementCorrecte ? 'text-pitch-dark' : 'text-card-red'}>
+                          {pleinementCorrecte ? '✓' : '✕'}
+                        </span>{' '}
+                        {q.text}
+                      </p>
+                      <span className="text-xs font-medium shrink-0">{formatPourcentage(q.score)}</span>
+                    </div>
+
+                    {q.type !== 'text' && q.media_url && (
+                      <div className="mb-2">
+                        {mediaUrls[q.id] ? (
+                          q.type === 'video' ? (
+                            <video src={mediaUrls[q.id]} controls className="w-full rounded max-h-48" />
+                          ) : (
+                            <img src={mediaUrls[q.id]} alt="" className="w-full rounded max-h-48 object-contain" />
+                          )
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => afficherMedia(q)}
+                            disabled={chargementMedia === q.id}
+                            className="text-xs border border-border rounded px-3 py-1.5"
+                          >
+                            {chargementMedia === q.id
+                              ? 'Chargement…'
+                              : q.type === 'video'
+                                ? 'Revoir la vidéo'
+                                : "Revoir l'image"}
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {!pleinementCorrecte && q.explanation && (
+                      <p className="text-xs text-muted">Explication : {q.explanation}</p>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </>
       ) : (
         <div className="bg-surface border border-border rounded p-5 text-center">
