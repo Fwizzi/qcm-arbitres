@@ -1,8 +1,3 @@
-Notes de l'export doivent être en % Travailler le barème accessible par le formateur lors de la création du QCM 
-
-Il faut ajouter la possibilité de supprimer un groupe uniquement s'il n'est pas utilisé lors d'un QCM actuellement publié
-
-Lorsque le QCM est expiré ou actif publié, lorsque le Formateur clique dessus sur l'onglet QCM il doit directement être dirigé à la page "voir les résultats" sans passer par les paramètres du QCM.
 
 Dans l'onglet Arbitres, Historique, il faut débloquer l'accès à la correction du QCM (consultable le nombre de jour paramétré par l'administrateur
 
