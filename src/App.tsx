@@ -4,7 +4,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import RequireAuth from './components/RequireAuth';
 import Login from './pages/Login';
 import MonProfil from './pages/MonProfil';
-import AdminDashboard from './pages/admin/Dashboard';
+import AdminDashboard from './pages/admin/Dashboard_admin';
 import Comptes from './pages/admin/Comptes';
 import Journal from './pages/admin/Journal';
 import Reglages from './pages/admin/Reglages';
