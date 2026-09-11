@@ -1,4 +1,5 @@
 import { type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import RoleSwitcher from './RoleSwitcher';
 
@@ -11,6 +12,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         <RoleSwitcher />
         <div className="flex items-center gap-3 ml-auto">
           <span className="text-sm text-muted hidden sm:inline">{profile?.full_name}</span>
+          <Link to="/mon-profil" className="text-sm text-muted underline">
+            Mon mot de passe
+          </Link>
           <button onClick={() => signOut()} className="text-sm text-muted underline">
             Déconnexion
           </button>
