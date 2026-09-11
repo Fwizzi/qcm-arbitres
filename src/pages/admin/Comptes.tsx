@@ -26,6 +26,12 @@ export default function Comptes() {
   const [error, setError] = useState<string | null>(null);
   const [ouvert, setOuvert] = useState<string | null>(null);
   const [enregistrement, setEnregistrement] = useState(false);
+  const [nomEdite, setNomEdite] = useState('');
+  const [enregistrementNom, setEnregistrementNom] = useState(false);
+  const [nouveauMotDePasse, setNouveauMotDePasse] = useState('');
+  const [enregistrementMdp, setEnregistrementMdp] = useState(false);
+  const [erreurMdp, setErreurMdp] = useState<string | null>(null);
+  const [succesMdp, setSuccesMdp] = useState(false);
 
   const [formulaireOuvert, setFormulaireOuvert] = useState(false);
   const [nomComplet, setNomComplet] = useState('');
@@ -74,6 +80,47 @@ export default function Comptes() {
     }
     await charger();
     setEnregistrement(false);
+  }
+
+  function ouvrirPanneau(p: PersonneAvecRoles) {
+    const memePersonne = ouvert === p.id;
+    setOuvert(memePersonne ? null : p.id);
+    setNomEdite(p.full_name);
+    setNouveauMotDePasse('');
+    setErreurMdp(null);
+    setSuccesMdp(false);
+  }
+
+  async function enregistrerNom(personneId: string) {
+    setEnregistrementNom(true);
+    const { error } = await supabase.from('profiles').update({ full_name: nomEdite }).eq('id', personneId);
+    setEnregistrementNom(false);
+    if (!error) {
+      await logActivity(`a modifié le nom de ${nomEdite}`, 'profile', personneId);
+      await charger();
+    }
+  }
+
+  async function reinitialiserMotDePasse(personneId: string, nomPersonne: string) {
+    setErreurMdp(null);
+    setSuccesMdp(false);
+    if (nouveauMotDePasse.length < 8) {
+      setErreurMdp('Le mot de passe doit faire au moins 8 caractères.');
+      return;
+    }
+    setEnregistrementMdp(true);
+    const { data, error } = await supabase.functions.invoke('create-user', {
+      body: { action: 'update-password', userId: personneId, password: nouveauMotDePasse },
+    });
+    setEnregistrementMdp(false);
+
+    if (error || data?.error) {
+      setErreurMdp(await extraireErreurFonction(error, data));
+      return;
+    }
+    setNouveauMotDePasse('');
+    setSuccesMdp(true);
+    await logActivity(`a réinitialisé le mot de passe de ${nomPersonne}`, 'profile', personneId);
   }
 
   async function creerCompte(e: FormEvent) {
@@ -183,7 +230,7 @@ export default function Comptes() {
             <button
               type="button"
               className="w-full flex items-start gap-3 text-left"
-              onClick={() => setOuvert(ouvert === p.id ? null : p.id)}
+              onClick={() => ouvrirPanneau(p)}
               aria-expanded={ouvert === p.id}
             >
               <span className="w-9 h-9 rounded-full bg-pitch-light text-pitch-dark flex items-center justify-center text-sm font-medium shrink-0">
@@ -209,21 +256,69 @@ export default function Comptes() {
             </button>
 
             {ouvert === p.id && (
-              <div className="mt-3 pl-12 flex flex-col gap-2">
-                {TOUS_LES_ROLES.map((role) => {
-                  const actif = p.roles.includes(role);
-                  return (
-                    <label key={role} className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={actif}
-                        disabled={enregistrement}
-                        onChange={() => basculerRole(p.id, role, actif)}
-                      />
-                      {LABELS[role]}
-                    </label>
-                  );
-                })}
+              <div className="mt-3 pl-12 flex flex-col gap-4">
+                <div className="flex flex-col gap-2">
+                  {TOUS_LES_ROLES.map((role) => {
+                    const actif = p.roles.includes(role);
+                    return (
+                      <label key={role} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={actif}
+                          disabled={enregistrement}
+                          onChange={() => basculerRole(p.id, role, actif)}
+                        />
+                        {LABELS[role]}
+                      </label>
+                    );
+                  })}
+                </div>
+
+                <div>
+                  <label className="block text-xs text-muted mb-1">Nom complet</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={nomEdite}
+                      onChange={(e) => setNomEdite(e.target.value)}
+                      className="flex-1 border border-border rounded px-3 py-1.5 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => enregistrerNom(p.id)}
+                      disabled={enregistrementNom || !nomEdite.trim() || nomEdite === p.full_name}
+                      className="text-xs border border-border rounded px-3 disabled:opacity-50"
+                    >
+                      {enregistrementNom ? '…' : 'Enregistrer'}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-muted mb-1">Réinitialiser le mot de passe</label>
+                  <div className="flex gap-2 mb-1">
+                    <input
+                      type="text"
+                      placeholder="Nouveau mot de passe"
+                      value={nouveauMotDePasse}
+                      onChange={(e) => setNouveauMotDePasse(e.target.value)}
+                      className="flex-1 border border-border rounded px-3 py-1.5 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => reinitialiserMotDePasse(p.id, p.full_name)}
+                      disabled={enregistrementMdp || !nouveauMotDePasse}
+                      className="text-xs border border-border rounded px-3 disabled:opacity-50"
+                    >
+                      {enregistrementMdp ? '…' : 'Réinitialiser'}
+                    </button>
+                  </div>
+                  {erreurMdp && <p className="text-xs text-card-red">{erreurMdp}</p>}
+                  {succesMdp && <p className="text-xs text-pitch-dark">Mot de passe mis à jour.</p>}
+                  <p className="text-xs text-muted">
+                    8 caractères minimum. Transmets-le à la personne concernée.
+                  </p>
+                </div>
               </div>
             )}
           </li>
