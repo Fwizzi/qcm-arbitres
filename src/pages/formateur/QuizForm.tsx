@@ -38,6 +38,7 @@ export default function QuizForm() {
   const [statut, setStatut] = useState<'draft' | 'published' | null>(null);
   const [dureeMinutes, setDureeMinutes] = useState(20);
   const [afficherScore, setAfficherScore] = useState(true);
+  const [afficherCorrection, setAfficherCorrection] = useState(true);
   const [afficherNombreAttendu, setAfficherNombreAttendu] = useState(true);
   const [dateDebut, setDateDebut] = useState('');
   const [dateFin, setDateFin] = useState('');
@@ -74,7 +75,7 @@ export default function QuizForm() {
       if (!estNouveau && id) {
         const { data: quiz, error } = await supabase
           .from('quizzes')
-          .select('title, status, time_limit_minutes, show_score, show_expected_count, period_start, period_end')
+          .select('title, status, time_limit_minutes, show_score, show_correction, show_expected_count, period_start, period_end')
           .eq('id', id)
           .single();
 
@@ -88,6 +89,7 @@ export default function QuizForm() {
         setStatut(quiz.status);
         setDureeMinutes(quiz.time_limit_minutes);
         setAfficherScore(quiz.show_score);
+        setAfficherCorrection(quiz.show_correction);
         setAfficherNombreAttendu(quiz.show_expected_count);
         setDateDebut(versDatetimeLocal(quiz.period_start));
         setDateFin(versDatetimeLocal(quiz.period_end));
@@ -119,6 +121,7 @@ export default function QuizForm() {
       title: titre,
       time_limit_minutes: dureeMinutes,
       show_score: afficherScore,
+      show_correction: afficherCorrection,
       show_expected_count: afficherNombreAttendu,
       period_start: new Date(dateDebut).toISOString(),
       period_end: new Date(dateFin).toISOString(),
@@ -224,6 +227,16 @@ export default function QuizForm() {
       <label className="flex items-center gap-2 text-sm mb-4 py-2 border-t border-border">
         <input type="checkbox" checked={afficherScore} disabled={estPublie} onChange={(e) => setAfficherScore(e.target.checked)} />
         Afficher le score à l'arbitre
+      </label>
+
+      <label className="flex items-center gap-2 text-sm mb-4 py-2 border-t border-border">
+        <input
+          type="checkbox"
+          checked={afficherCorrection}
+          disabled={estPublie}
+          onChange={(e) => setAfficherCorrection(e.target.checked)}
+        />
+        Afficher la correction détaillée à l'arbitre à l'issue de la période
       </label>
 
       <label className="flex items-center gap-2 text-sm mb-4 py-2 border-y border-border">
