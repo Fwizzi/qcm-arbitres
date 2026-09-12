@@ -49,13 +49,8 @@ Deno.serve(async (req: Request) => {
       return json({ error: "Réservé à l'administrateur." }, 403);
     }
 
-    const { email, password, full_name } = await req.json();
-    if (!email || !password || !full_name) {
-      return json({ error: 'E-mail, mot de passe et nom complet requis.' }, 400);
-    }
-    if (password.length < 8) {
-      return json({ error: 'Le mot de passe doit faire au moins 8 caractères.' }, 400);
-    }
+    const body = await req.json();
+    const action = body.action ?? 'create';
 
     // Client "admin" : utilise la clé secrète, disponible uniquement ici,
     // jamais transmise au navigateur.
@@ -63,6 +58,47 @@ Deno.serve(async (req: Request) => {
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
+
+    if (action === 'update-password') {
+      const { userId, password } = body;
+      if (!userId || !password) {
+        return json({ error: 'Identifiant et mot de passe requis.' }, 400);
+      }
+      if (password.length < 8) {
+        return json({ error: 'Le mot de passe doit faire au moins 8 caractères.' }, 400);
+      }
+
+      const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(userId, { password });
+      if (updateErr) {
+        return json({ error: updateErr.message }, 400);
+      }
+      return json({ success: true }, 200);
+    }
+
+    if (action === 'delete') {
+      const { userId } = body;
+      if (!userId) {
+        return json({ error: 'Identifiant requis.' }, 400);
+      }
+      if (userId === userData.user.id) {
+        return json({ error: 'Tu ne peux pas supprimer ton propre compte.' }, 400);
+      }
+
+      const { error: deleteErr } = await supabaseAdmin.auth.admin.deleteUser(userId);
+      if (deleteErr) {
+        return json({ error: deleteErr.message }, 400);
+      }
+      return json({ success: true }, 200);
+    }
+
+    // action === 'create' (comportement d'origine)
+    const { email, password, full_name } = body;
+    if (!email || !password || !full_name) {
+      return json({ error: 'E-mail, mot de passe et nom complet requis.' }, 400);
+    }
+    if (password.length < 8) {
+      return json({ error: 'Le mot de passe doit faire au moins 8 caractères.' }, 400);
+    }
 
     const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
       email,
