@@ -45,6 +45,7 @@ export default function QuizQuestions() {
   const [explication, setExplication] = useState('');
   const [options, setOptions] = useState<AnswerOption[]>([nouvelleOption(), nouvelleOption()]);
   const [fichier, setFichier] = useState<File | null>(null);
+  const [progressionEnvoi, setProgressionEnvoi] = useState<number | null>(null);
   const [apercu, setApercu] = useState<string | null>(null);
   const [mediaKeyExistant, setMediaKeyExistant] = useState<string | null>(null);
   const [chargementApercu, setChargementApercu] = useState(false);
@@ -148,14 +149,24 @@ export default function QuizQuestions() {
       throw new Error(await extraireErreurFonction(error, data));
     }
 
-    const reponse = await fetch(data.uploadUrl, {
-      method: 'PUT',
-      headers: { 'Content-Type': fichier.type },
-      body: fichier,
+    // XMLHttpRequest plutôt que fetch : c'est le seul des deux à permettre
+    // de suivre la progression réelle de l'envoi du fichier.
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('PUT', data.uploadUrl);
+      xhr.setRequestHeader('Content-Type', fichier.type);
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          setProgressionEnvoi(Math.round((e.loaded / e.total) * 100));
+        }
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve();
+        else reject(new Error("L'envoi du fichier vers le stockage a échoué."));
+      };
+      xhr.onerror = () => reject(new Error("L'envoi du fichier vers le stockage a échoué."));
+      xhr.send(fichier);
     });
-    if (!reponse.ok) {
-      throw new Error("L'envoi du fichier vers le stockage a échoué.");
-    }
 
     return data.key as string;
   }
@@ -180,6 +191,7 @@ export default function QuizQuestions() {
     }
 
     setEnregistrement(true);
+    setProgressionEnvoi(null);
     try {
       // Un nouveau fichier remplace l'ancien ; sinon, on garde le média existant
       // (utile en modification si on ne veut changer que le texte ou les réponses).
@@ -233,6 +245,7 @@ export default function QuizQuestions() {
       setErreurForm(err instanceof Error ? err.message : 'Une erreur est survenue.');
     } finally {
       setEnregistrement(false);
+      setProgressionEnvoi(null);
     }
   }
 
@@ -347,6 +360,17 @@ export default function QuizQuestions() {
               className="w-full text-sm"
             />
             {chargementApercu && <p className="text-xs text-muted mt-2">Chargement de l’aperçu…</p>}
+            {progressionEnvoi !== null && (
+              <div className="mt-2">
+                <div className="h-1.5 bg-canvas rounded overflow-hidden">
+                  <div
+                    className="h-full bg-pitch transition-all"
+                    style={{ width: `${progressionEnvoi}%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted mt-1">Envoi en cours… {progressionEnvoi}%</p>
+              </div>
+            )}
             {apercu && type === 'image' && (
               <img src={apercu} alt="Aperçu" className="mt-2 rounded max-h-40" />
             )}
