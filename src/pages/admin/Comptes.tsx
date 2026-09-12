@@ -32,6 +32,10 @@ export default function Comptes() {
   const [enregistrementMdp, setEnregistrementMdp] = useState(false);
   const [erreurMdp, setErreurMdp] = useState<string | null>(null);
   const [succesMdp, setSuccesMdp] = useState(false);
+  const [confirmationSuppression, setConfirmationSuppression] = useState<string | null>(null);
+  const [avertissementSuppression, setAvertissementSuppression] = useState<string | null>(null);
+  const [suppression, setSuppression] = useState(false);
+  const [erreurSuppression, setErreurSuppression] = useState<string | null>(null);
 
   const [formulaireOuvert, setFormulaireOuvert] = useState(false);
   const [nomComplet, setNomComplet] = useState('');
@@ -89,6 +93,9 @@ export default function Comptes() {
     setNouveauMotDePasse('');
     setErreurMdp(null);
     setSuccesMdp(false);
+    setConfirmationSuppression(null);
+    setAvertissementSuppression(null);
+    setErreurSuppression(null);
   }
 
   async function enregistrerNom(personneId: string) {
@@ -121,6 +128,42 @@ export default function Comptes() {
     setNouveauMotDePasse('');
     setSuccesMdp(true);
     await logActivity(`a réinitialisé le mot de passe de ${nomPersonne}`, 'profile', personneId);
+  }
+
+  async function demanderConfirmationSuppression(p: PersonneAvecRoles) {
+    setErreurSuppression(null);
+    setAvertissementSuppression(null);
+
+    if (p.roles.includes('formateur')) {
+      const { count } = await supabase
+        .from('quizzes')
+        .select('id', { count: 'exact', head: true })
+        .eq('formateur_id', p.id);
+      if (count && count > 0) {
+        setAvertissementSuppression(
+          `Ce formateur a créé ${count} QCM. Les supprimer entraînera la perte définitive de leurs questions et de toutes les réponses des arbitres qui y ont déjà répondu.`
+        );
+      }
+    }
+    setConfirmationSuppression(p.id);
+  }
+
+  async function supprimerCompte(personneId: string, nomPersonne: string) {
+    setSuppression(true);
+    setErreurSuppression(null);
+    const { data, error } = await supabase.functions.invoke('create-user', {
+      body: { action: 'delete', userId: personneId },
+    });
+    setSuppression(false);
+
+    if (error || data?.error) {
+      setErreurSuppression(await extraireErreurFonction(error, data));
+      return;
+    }
+    setConfirmationSuppression(null);
+    setOuvert(null);
+    await logActivity(`a supprimé le compte de ${nomPersonne}`, 'profile', personneId);
+    await charger();
   }
 
   async function creerCompte(e: FormEvent) {
@@ -318,6 +361,47 @@ export default function Comptes() {
                   <p className="text-xs text-muted">
                     8 caractères minimum. Transmets-le à la personne concernée.
                   </p>
+                </div>
+
+                <div className="pt-3 border-t border-border">
+                  {confirmationSuppression !== p.id ? (
+                    <button
+                      type="button"
+                      onClick={() => demanderConfirmationSuppression(p)}
+                      className="w-full text-xs border border-border rounded py-1.5 text-card-red"
+                    >
+                      Supprimer ce compte
+                    </button>
+                  ) : (
+                    <div>
+                      {avertissementSuppression && (
+                        <p className="text-xs text-card-red bg-card-red-bg rounded px-3 py-2 mb-2">
+                          {avertissementSuppression}
+                        </p>
+                      )}
+                      <p className="text-sm mb-2">Confirmer la suppression définitive de ce compte ?</p>
+                      {erreurSuppression && (
+                        <p className="text-xs text-card-red mb-2">{erreurSuppression}</p>
+                      )}
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setConfirmationSuppression(null)}
+                          className="flex-1 border border-border rounded py-1.5 text-xs"
+                        >
+                          Annuler
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => supprimerCompte(p.id, p.full_name)}
+                          disabled={suppression}
+                          className="flex-1 bg-card-red text-white rounded py-1.5 text-xs disabled:opacity-60"
+                        >
+                          {suppression ? 'Suppression…' : 'Supprimer définitivement'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
