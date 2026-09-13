@@ -92,13 +92,13 @@ export default function FormateurDashboard() {
                 <p className="text-xs text-muted">
                   {formatDate(q.period_start)} → {formatDate(q.period_end)}
                 </p>
-                 <Link
-                    to={`/formateur/qcm/${q.id}/resultats`}
-                    className="block text-center text-xs text-white rounded py-1.5"
-                    style={{ backgroundColor: "#386D4D" }}
-                  >
-                    Voir les résultats
-                  </Link>
+              </Link>
+              <Link
+                to={`/formateur/qcm/${q.id}/resultats`}
+                className="block text-center text-xs border border-border rounded py-1.5"
+              >
+                Voir les résultats
+              </Link>
             </li>
           );
         })}
