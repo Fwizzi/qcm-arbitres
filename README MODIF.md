@@ -1,4 +1,1 @@
-
-
-
-ATTENTION il est possible de faire le QCM depuis deux interfaces différentes en même temps (ordinateur + Mobile par exemple)
+Note globale du QCM doit être la somme de toutes les notes de chaque question du QCM divisé par le nombre de questions.
