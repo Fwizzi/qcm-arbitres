@@ -21,6 +21,21 @@ interface QuestionRow {
   options: AnswerOption[];
 }
 
+// Une question en cours d'envoi en arrière-plan (média + enregistrement),
+// pendant que le formateur peut déjà passer à la question suivante.
+interface EnvoiEnCours {
+  id: string;
+  type: QuestionType;
+  texte: string;
+  explication: string;
+  options: AnswerOption[];
+  fichier: File;
+  progression: number;
+  statut: 'envoi' | 'enregistrement' | 'erreur';
+  erreur?: string;
+  ordreIndex: number;
+}
+
 const TYPE_LABELS: Record<QuestionType, string> = {
   video: 'Vidéo',
   image: 'Image',
@@ -45,12 +60,13 @@ export default function QuizQuestions() {
   const [explication, setExplication] = useState('');
   const [options, setOptions] = useState<AnswerOption[]>([nouvelleOption(), nouvelleOption()]);
   const [fichier, setFichier] = useState<File | null>(null);
-  const [progressionEnvoi, setProgressionEnvoi] = useState<number | null>(null);
   const [apercu, setApercu] = useState<string | null>(null);
   const [mediaKeyExistant, setMediaKeyExistant] = useState<string | null>(null);
   const [chargementApercu, setChargementApercu] = useState(false);
   const [enregistrement, setEnregistrement] = useState(false);
   const [erreurForm, setErreurForm] = useState<string | null>(null);
+
+  const [envoisEnCours, setEnvoisEnCours] = useState<EnvoiEnCours[]>([]);
 
   async function charger() {
     if (!quizId) return;
@@ -138,37 +154,105 @@ export default function QuizQuestions() {
     window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
   }
 
-  async function televerserMedia(): Promise<string> {
-    if (!fichier) throw new Error('Aucun fichier sélectionné.');
-    const extension = fichier.name.split('.').pop() ?? 'bin';
+  // Envoie UN fichier donné vers R2, en rapportant sa progression via le
+  // callback fourni. Ne lit plus rien depuis l'état du formulaire : ainsi,
+  // le formulaire peut être réutilisé pour une autre question pendant que
+  // cet envoi continue en arrière-plan.
+  async function televerserMedia(f: File, onProgress: (p: number) => void): Promise<string> {
+    const extension = f.name.split('.').pop() ?? 'bin';
 
     const { data, error } = await supabase.functions.invoke('r2-upload-url', {
-      body: { action: 'upload', fileType: fichier.type, fileExtension: extension, fileSize: fichier.size },
+      body: { action: 'upload', fileType: f.type, fileExtension: extension, fileSize: f.size },
     });
     if (error || !data?.uploadUrl) {
       throw new Error(await extraireErreurFonction(error, data));
     }
 
-    // XMLHttpRequest plutôt que fetch : c'est le seul des deux à permettre
-    // de suivre la progression réelle de l'envoi du fichier.
     await new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open('PUT', data.uploadUrl);
-      xhr.setRequestHeader('Content-Type', fichier.type);
+      xhr.setRequestHeader('Content-Type', f.type);
       xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) {
-          setProgressionEnvoi(Math.round((e.loaded / e.total) * 100));
-        }
+        if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
       };
       xhr.onload = () => {
         if (xhr.status >= 200 && xhr.status < 300) resolve();
         else reject(new Error("L'envoi du fichier vers le stockage a échoué."));
       };
       xhr.onerror = () => reject(new Error("L'envoi du fichier vers le stockage a échoué."));
-      xhr.send(fichier);
+      xhr.send(f);
     });
 
     return data.key as string;
+  }
+
+  // Enregistre la question (et ses réponses) en base, une fois qu'on
+  // connaît la clé média finale (ou null pour une question texte).
+  async function enregistrerQuestionEnBase(
+    mediaKey: string | null,
+    t: QuestionType,
+    txt: string,
+    expl: string,
+    opts: AnswerOption[],
+    idExistant: string | null,
+    ordreIndex: number
+  ) {
+    let questionId = idExistant;
+
+    if (idExistant) {
+      const { error: errUpdate } = await supabase
+        .from('questions')
+        .update({ type: t, media_url: mediaKey, text: txt, explanation: expl || null })
+        .eq('id', idExistant);
+      if (errUpdate) throw new Error('La modification de la question a échoué.');
+      await supabase.from('answer_options').delete().eq('question_id', idExistant);
+    } else {
+      const { data: question, error: errQuestion } = await supabase
+        .from('questions')
+        .insert({
+          quiz_id: quizId,
+          type: t,
+          media_url: mediaKey,
+          text: txt,
+          explanation: expl || null,
+          order_index: ordreIndex,
+        })
+        .select('id')
+        .single();
+      if (errQuestion || !question) throw new Error("L'enregistrement de la question a échoué.");
+      questionId = question.id;
+    }
+
+    const { error: errOptions } = await supabase.from('answer_options').insert(
+      opts.map((o) => ({ question_id: questionId, text: o.text, is_correct: o.is_correct }))
+    );
+    if (errOptions) throw new Error("L'enregistrement des réponses a échoué.");
+  }
+
+  // Envoie le média et enregistre la question en tâche de fond, sans
+  // bloquer le formulaire (qui a déjà été réinitialisé pour la suivante).
+  async function lancerEnvoiEnArrierePlan(job: EnvoiEnCours) {
+    try {
+      const mediaKey = await televerserMedia(job.fichier, (p) => {
+        setEnvoisEnCours((prev) => prev.map((j) => (j.id === job.id ? { ...j, progression: p } : j)));
+      });
+      setEnvoisEnCours((prev) => prev.map((j) => (j.id === job.id ? { ...j, statut: 'enregistrement' } : j)));
+      await enregistrerQuestionEnBase(mediaKey, job.type, job.texte, job.explication, job.options, null, job.ordreIndex);
+      setEnvoisEnCours((prev) => prev.filter((j) => j.id !== job.id));
+      await charger();
+    } catch (err) {
+      setEnvoisEnCours((prev) =>
+        prev.map((j) =>
+          j.id === job.id
+            ? { ...j, statut: 'erreur', erreur: err instanceof Error ? err.message : 'Une erreur est survenue.' }
+            : j
+        )
+      );
+    }
+  }
+
+  function retirerEnvoiEnErreur(jobId: string) {
+    setEnvoisEnCours((prev) => prev.filter((j) => j.id !== jobId));
   }
 
   async function enregistrerQuestion(e: FormEvent) {
@@ -190,62 +274,56 @@ export default function QuizQuestions() {
       return;
     }
 
+    // Modification d'une question existante : on garde un enregistrement
+    // classique (immédiat), plus simple pour ce cas moins fréquent.
+    if (questionEnEditionId) {
+      setEnregistrement(true);
+      try {
+        let mediaKey: string | null = type === 'text' ? null : mediaKeyExistant;
+        if (fichier) {
+          mediaKey = await televerserMedia(fichier, () => {});
+        }
+        await enregistrerQuestionEnBase(mediaKey, type, texte, explication, optionsRemplies, questionEnEditionId, 0);
+        reinitialiserFormulaire();
+        await charger();
+      } catch (err) {
+        setErreurForm(err instanceof Error ? err.message : 'Une erreur est survenue.');
+      } finally {
+        setEnregistrement(false);
+      }
+      return;
+    }
+
+    // Nouvelle question avec un fichier : envoi en arrière-plan, le
+    // formulaire se libère immédiatement pour la question suivante.
+    if (fichier) {
+      const job: EnvoiEnCours = {
+        id: crypto.randomUUID(),
+        type,
+        texte,
+        explication,
+        options: optionsRemplies,
+        fichier,
+        progression: 0,
+        statut: 'envoi',
+        ordreIndex: questions.length + envoisEnCours.length,
+      };
+      setEnvoisEnCours((prev) => [...prev, job]);
+      reinitialiserFormulaire();
+      lancerEnvoiEnArrierePlan(job);
+      return;
+    }
+
+    // Nouvelle question texte, sans média : rapide, reste immédiat.
     setEnregistrement(true);
-    setProgressionEnvoi(null);
     try {
-      // Un nouveau fichier remplace l'ancien ; sinon, on garde le média existant
-      // (utile en modification si on ne veut changer que le texte ou les réponses).
-      let mediaKey: string | null = type === 'text' ? null : mediaKeyExistant;
-      if (fichier) {
-        mediaKey = await televerserMedia();
-      }
-
-      let questionId = questionEnEditionId;
-
-      if (questionEnEditionId) {
-        const { error: errUpdate } = await supabase
-          .from('questions')
-          .update({ type, media_url: mediaKey, text: texte, explanation: explication || null })
-          .eq('id', questionEnEditionId);
-        if (errUpdate) throw new Error("La modification de la question a échoué.");
-
-        // Les réponses sont peu nombreuses : on efface puis on réinsère,
-        // plus simple et plus sûr qu'un diff précis.
-        await supabase.from('answer_options').delete().eq('question_id', questionEnEditionId);
-      } else {
-        const { data: question, error: errQuestion } = await supabase
-          .from('questions')
-          .insert({
-            quiz_id: quizId,
-            type,
-            media_url: mediaKey,
-            text: texte,
-            explanation: explication || null,
-            order_index: questions.length,
-          })
-          .select('id')
-          .single();
-
-        if (errQuestion || !question) throw new Error("L'enregistrement de la question a échoué.");
-        questionId = question.id;
-      }
-
-      const { error: errOptions } = await supabase.from('answer_options').insert(
-        optionsRemplies.map((o) => ({
-          question_id: questionId,
-          text: o.text,
-          is_correct: o.is_correct,
-        }))
-      );
-      if (errOptions) throw new Error("L'enregistrement des réponses a échoué.");
-
+      await enregistrerQuestionEnBase(null, type, texte, explication, optionsRemplies, null, questions.length + envoisEnCours.length);
       reinitialiserFormulaire();
       await charger();
     } catch (err) {
       setErreurForm(err instanceof Error ? err.message : 'Une erreur est survenue.');
     } finally {
       setEnregistrement(false);
-      setProgressionEnvoi(null);
     }
   }
 
@@ -264,6 +342,37 @@ export default function QuizQuestions() {
 
       {loading && <p className="text-sm text-muted">Chargement…</p>}
       {erreurListe && <p className="text-sm text-card-red mb-4">{erreurListe}</p>}
+
+      {envoisEnCours.length > 0 && (
+        <div className="flex flex-col gap-2 mb-4">
+          {envoisEnCours.map((j) => (
+            <div key={j.id} className="bg-surface border border-border rounded p-3">
+              <p className="text-sm font-medium mb-1 truncate">{j.texte || '(sans texte)'}</p>
+              {j.statut === 'erreur' ? (
+                <>
+                  <p className="text-xs text-card-red mb-2">{j.erreur}</p>
+                  <button
+                    type="button"
+                    onClick={() => retirerEnvoiEnErreur(j.id)}
+                    className="text-xs border border-border rounded px-2 py-1"
+                  >
+                    Ignorer
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="h-1.5 bg-canvas rounded overflow-hidden">
+                    <div className="h-full bg-pitch transition-all" style={{ width: `${j.progression}%` }} />
+                  </div>
+                  <p className="text-xs text-muted mt-1">
+                    {j.statut === 'envoi' ? `Envoi en cours… ${j.progression}%` : 'Enregistrement…'}
+                  </p>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {!loading && questions.length > 0 && (
         <ul className="flex flex-col gap-2 mb-6">
@@ -360,22 +469,16 @@ export default function QuizQuestions() {
               className="w-full text-sm"
             />
             {chargementApercu && <p className="text-xs text-muted mt-2">Chargement de l’aperçu…</p>}
-            {progressionEnvoi !== null && (
-              <div className="mt-2">
-                <div className="h-1.5 bg-canvas rounded overflow-hidden">
-                  <div
-                    className="h-full bg-pitch transition-all"
-                    style={{ width: `${progressionEnvoi}%` }}
-                  />
-                </div>
-                <p className="text-xs text-muted mt-1">Envoi en cours… {progressionEnvoi}%</p>
-              </div>
-            )}
             {apercu && type === 'image' && (
               <img src={apercu} alt="Aperçu" className="mt-2 rounded max-h-40" />
             )}
             {apercu && type === 'video' && (
               <video src={apercu} controls className="mt-2 rounded max-h-40 w-full" />
+            )}
+            {fichier && !questionEnEditionId && (
+              <p className="text-xs text-muted mt-2">
+                L'envoi se fera en arrière-plan : tu peux enchaîner sur la question suivante dès l'enregistrement.
+              </p>
             )}
           </div>
         )}
