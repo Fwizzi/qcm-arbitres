@@ -1,4 +1,4 @@
-
+Lorsqu'un QCM est supprimé, l'ensemble des Vidéos enregistrées sur cloudflare doivent se supprimer aussi.
 
 Il faut que je puisse dupliquer un QCM entier, même s'il est publié et Actif
 
