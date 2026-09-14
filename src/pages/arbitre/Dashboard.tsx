@@ -26,10 +26,13 @@ export default function ArbitreAccueil() {
     setErreur(null);
 
     // RLS ne renvoie déjà que les QCM publiés, dans leur période, et ciblant
-    // les groupes de cet arbitre — pas besoin de refiltrer manuellement.
+    // les groupes de cet arbitre. Exception : un compte qui est AUSSI
+    // formateur voit en plus ses propres QCM via la règle "formateur" — on
+    // les exclut explicitement ici, ils n'ont rien à faire dans "à faire".
     const { data: quizzesData, error: err1 } = await supabase
       .from('quizzes')
-      .select('id, title, time_limit_minutes');
+      .select('id, title, time_limit_minutes')
+      .neq('formateur_id', session.user.id);
     const { data: attemptsData } = await supabase
       .from('quiz_attempts')
       .select('quiz_id, status, started_at')
