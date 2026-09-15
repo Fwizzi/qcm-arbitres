@@ -12,6 +12,7 @@ import FormateurDashboard from './pages/formateur/Dashboard';
 import QuizForm from './pages/formateur/QuizForm';
 import QuizQuestions from './pages/formateur/QuizQuestions';
 import QuizResultats from './pages/formateur/QuizResultats';
+import AttemptDetail from './pages/formateur/AttemptDetail';
 import Groupes from './pages/formateur/Groupes';
 import GroupMembers from './pages/formateur/GroupMembers';
 import ArbitreAccueil from './pages/arbitre/Dashboard';
@@ -109,6 +110,14 @@ export default function App() {
             element={
               <ProtectedRoute role="formateur">
                 <QuizResultats />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/formateur/qcm/:id/resultats/:attemptId"
+            element={
+              <ProtectedRoute role="formateur">
+                <AttemptDetail />
               </ProtectedRoute>
             }
           />
