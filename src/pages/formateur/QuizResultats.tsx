@@ -10,6 +10,7 @@ interface LigneResultat {
   email: string;
   statut: 'non_repondu' | 'en_cours' | 'soumis';
   score: number | null;
+  attemptId: string | null;
 }
 
 export default function QuizResultats() {
@@ -64,7 +65,7 @@ export default function QuizResultats() {
 
     const { data: tentatives } = await supabase
       .from('quiz_attempts')
-      .select('user_id, status, score')
+      .select('id, user_id, status, score')
       .eq('quiz_id', quizId);
 
     const resultat: LigneResultat[] = profils.map((p) => {
@@ -73,7 +74,14 @@ export default function QuizResultats() {
       if (tentative) {
         statut = tentative.status === 'in_progress' ? 'en_cours' : 'soumis';
       }
-      return { id: p.id, full_name: p.full_name, email: p.email, statut, score: tentative?.score ?? null };
+      return {
+        id: p.id,
+        full_name: p.full_name,
+        email: p.email,
+        statut,
+        score: tentative?.score ?? null,
+        attemptId: tentative?.id ?? null,
+      };
     });
 
     setLignes(resultat);
@@ -192,20 +200,27 @@ export default function QuizResultats() {
       )}
 
       <ul className="mb-6">
-        {lignes.map((l) => (
-          <li key={l.id} className="flex items-center justify-between py-2.5 border-b border-border">
-            <span className={`text-sm ${l.statut === 'non_repondu' ? 'text-muted' : ''}`}>
-              {l.full_name}
-            </span>
-            {l.statut === 'soumis' && (
-              <span className="text-sm font-medium">
-                {formatPourcentage(l.score ?? 0)}
+        {lignes.map((l) =>
+          l.statut === 'soumis' && l.attemptId ? (
+            <li key={l.id} className="border-b border-border">
+              <Link
+                to={`/formateur/qcm/${quizId}/resultats/${l.attemptId}`}
+                className="flex items-center justify-between py-2.5"
+              >
+                <span className="text-sm">{l.full_name}</span>
+                <span className="text-sm font-medium">{formatPourcentage(l.score ?? 0)}</span>
+              </Link>
+            </li>
+          ) : (
+            <li key={l.id} className="flex items-center justify-between py-2.5 border-b border-border">
+              <span className={`text-sm ${l.statut === 'non_repondu' ? 'text-muted' : ''}`}>
+                {l.full_name}
               </span>
-            )}
-            {l.statut === 'en_cours' && <span className="text-xs text-card-yellow">En cours</span>}
-            {l.statut === 'non_repondu' && <span className="text-xs text-muted">{l.email}</span>}
-          </li>
-        ))}
+              {l.statut === 'en_cours' && <span className="text-xs text-card-yellow">En cours</span>}
+              {l.statut === 'non_repondu' && <span className="text-xs text-muted">{l.email}</span>}
+            </li>
+          )
+        )}
       </ul>
 
       {!confirmationSuppression ? (
