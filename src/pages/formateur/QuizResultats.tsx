@@ -125,9 +125,54 @@ export default function QuizResultats() {
 
   async function exporterExcel() {
     const XLSX = await import('xlsx');
-    const feuille = XLSX.utils.json_to_sheet(donneesExport());
     const classeur = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(classeur, feuille, 'Résultats');
+
+    const feuilleSynthese = XLSX.utils.json_to_sheet(donneesExport());
+    XLSX.utils.book_append_sheet(classeur, feuilleSynthese, 'Résultats');
+
+    const repondants = lignes.filter((l) => l.statut === 'soumis' && l.attemptId);
+    if (repondants.length > 0 && quizId) {
+      const { data: questionsData } = await supabase
+        .from('questions')
+        .select('id, text, order_index')
+        .eq('quiz_id', quizId)
+        .order('order_index');
+
+      const questionIds = (questionsData ?? []).map((q) => q.id);
+      const { data: optionsData } =
+        questionIds.length > 0
+          ? await supabase.from('answer_options').select('id, question_id, text').in('question_id', questionIds)
+          : { data: [] };
+
+      const attemptIds = repondants.map((r) => r.attemptId as string);
+      const { data: selectionsData } = await supabase
+        .from('selected_answers')
+        .select('attempt_id, option_id')
+        .in('attempt_id', attemptIds);
+
+      (questionsData ?? []).forEach((q, index) => {
+        const optionsQuestion = (optionsData ?? [])
+          .filter((o) => o.question_id === q.id)
+          .sort((a, b) => a.id.localeCompare(b.id));
+
+        const lignesFeuille = repondants.map((r) => {
+          const ligne: Record<string, string> = { Arbitre: r.full_name };
+          optionsQuestion.forEach((o) => {
+            const coche = (selectionsData ?? []).some(
+              (s) => s.attempt_id === r.attemptId && s.option_id === o.id
+            );
+            ligne[o.text] = coche ? 'X' : '';
+          });
+          return ligne;
+        });
+
+        const feuille = XLSX.utils.json_to_sheet(lignesFeuille);
+        // Excel limite les noms de feuille à 31 caractères et interdit : \ / ? * [ ]
+        const nomFeuille = `Q${index + 1} - ${q.text}`.replace(/[:\\/?*[\]]/g, '').slice(0, 31);
+        XLSX.utils.book_append_sheet(classeur, feuille, nomFeuille);
+      });
+    }
+
     XLSX.writeFile(classeur, `${titre}.xlsx`);
   }
 
@@ -174,7 +219,7 @@ export default function QuizResultats() {
 
       {erreur && <p className="text-sm text-card-red mb-4">{erreur}</p>}
 
-      <div className="flex gap-2 mb-6">
+      <div className="flex gap-2 mb-1">
         <button
           type="button"
           onClick={exporterExcel}
@@ -192,6 +237,10 @@ export default function QuizResultats() {
           Export CSV
         </button>
       </div>
+      <p className="text-xs text-muted mb-6">
+        Excel inclut le détail question par question (une feuille par question) ; le CSV ne
+        contient que la synthèse des scores.
+      </p>
 
       {lignes.length === 0 && (
         <p className="text-sm text-muted mb-6">
