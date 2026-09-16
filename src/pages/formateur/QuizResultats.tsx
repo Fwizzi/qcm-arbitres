@@ -200,6 +200,12 @@ export default function QuizResultats() {
   async function supprimerDefinitivement() {
     if (!quizId) return;
     setSuppression(true);
+
+    // Nettoyage des vidéos sur R2 d'abord ; un échec éventuel ne doit pas
+    // empêcher la suppression du QCM lui-même (voir commentaire dans la
+    // fonction serveur).
+    await supabase.functions.invoke('delete-quiz-videos', { body: { quizId } });
+
     const { error } = await supabase.from('quizzes').delete().eq('id', quizId);
     setSuppression(false);
     if (!error) {

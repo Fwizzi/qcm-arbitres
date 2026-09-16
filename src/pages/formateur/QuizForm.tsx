@@ -168,6 +168,7 @@ export default function QuizForm() {
   async function supprimerBrouillon() {
     if (!id) return;
     setSuppression(true);
+    await supabase.functions.invoke('delete-quiz-videos', { body: { quizId: id } });
     const { error } = await supabase.from('quizzes').delete().eq('id', id);
     setSuppression(false);
     if (!error) {
