@@ -29,6 +29,7 @@ export default function QuizAttempt() {
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
+  const [erreurSelection, setErreurSelection] = useState<string | null>(null);
   const [tempsRestant, setTempsRestant] = useState(0);
   const [soumission, setSoumission] = useState(false);
 
@@ -160,11 +161,23 @@ export default function QuizAttempt() {
 
   async function enregistrerSelection(questionId: string, choix: Set<string>) {
     if (!attemptId) return;
-    await supabase.from('selected_answers').delete().eq('attempt_id', attemptId).eq('question_id', questionId);
+    setErreurSelection(null);
+    const { error: errDelete } = await supabase
+      .from('selected_answers')
+      .delete()
+      .eq('attempt_id', attemptId)
+      .eq('question_id', questionId);
+    if (errDelete) {
+      setErreurSelection("Ta réponse n'a pas pu être enregistrée. Recoche ta réponse dans un instant.");
+      return;
+    }
     if (choix.size > 0) {
-      await supabase
+      const { error: errInsert } = await supabase
         .from('selected_answers')
         .insert(Array.from(choix).map((optionId) => ({ attempt_id: attemptId, question_id: questionId, option_id: optionId })));
+      if (errInsert) {
+        setErreurSelection("Ta réponse n'a pas pu être enregistrée. Recoche ta réponse dans un instant.");
+      }
     }
   }
 
@@ -239,6 +252,9 @@ export default function QuizAttempt() {
       )}
 
       <div className="flex flex-col gap-2 mb-6">
+        {erreurSelection && (
+          <p className="text-xs text-card-red bg-card-red-bg rounded px-3 py-2">{erreurSelection}</p>
+        )}
         {questionActuelle.options.map((o) => (
           <label
             key={o.id}
