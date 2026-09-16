@@ -29,7 +29,7 @@ export default function Historique() {
       const [{ data: attempts, error: err1 }, { data: reglage }] = await Promise.all([
         supabase
           .from('quiz_attempts')
-          .select('id, quiz_id, submitted_at, score')
+          .select('id, quiz_id, submitted_at')
           .eq('user_id', session.user.id)
           .in('status', ['submitted', 'auto_submitted'])
           .order('submitted_at', { ascending: false }),
@@ -42,6 +42,16 @@ export default function Historique() {
         return;
       }
       setRetentionJours(reglage ? Number(reglage.value) : null);
+
+      // Notes toujours recalculées en direct plutôt que de faire confiance
+      // à la valeur stockée (qui peut devenir périmée).
+      const scoresEnDirect = await Promise.all(
+        (attempts ?? []).map(async (a) => {
+          const { data } = await supabase.rpc('calculer_score_global', { p_attempt_id: a.id });
+          return { attemptId: a.id, score: data as number | null };
+        })
+      );
+      const scoreParTentative = Object.fromEntries(scoresEnDirect.map((s) => [s.attemptId, s.score]));
 
       const quizIds = Array.from(new Set((attempts ?? []).map((a) => a.quiz_id)));
       let titres: Record<string, string> = {};
@@ -56,7 +66,7 @@ export default function Historique() {
           quiz_id: a.quiz_id,
           titre: titres[a.quiz_id] ?? 'QCM',
           submitted_at: a.submitted_at,
-          score: a.score,
+          score: scoreParTentative[a.id] ?? null,
         }))
       );
       setLoading(false);
