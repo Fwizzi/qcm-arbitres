@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import AppLayout from '../../components/AppLayout';
 import { supabase } from '../../lib/supabaseClient';
 import { extraireErreurFonction } from '../../lib/functionsError';
+import { avecRetriesTimeout } from '../../lib/retryTimeout';
 
 type QuestionType = 'video' | 'image' | 'text';
 
@@ -205,10 +206,9 @@ export default function QuizQuestions() {
         .update({ type: t, media_url: mediaKey, text: txt, explanation: expl || null })
         .eq('id', idExistant);
       if (errUpdate) throw new Error('La modification de la question a échoué.');
-      const { error: errDeleteOptions } = await supabase
-        .from('answer_options')
-        .delete()
-        .eq('question_id', idExistant);
+      const { error: errDeleteOptions } = await avecRetriesTimeout(() =>
+        supabase.from('answer_options').delete().eq('question_id', idExistant)
+      );
       if (errDeleteOptions) {
         throw new Error(
           "Impossible de retirer les anciennes réponses avant d'enregistrer les nouvelles. Réessaie dans un instant."

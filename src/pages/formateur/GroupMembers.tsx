@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import AppLayout from '../../components/AppLayout';
 import FormateurNav from '../../components/FormateurNav';
 import { supabase } from '../../lib/supabaseClient';
+import { avecRetriesTimeout } from '../../lib/retryTimeout';
 
 interface ArbitreRow {
   id: string;
@@ -73,7 +74,9 @@ export default function GroupMembers() {
     setEnregistrement(true);
     setErreur(null);
 
-    const { error: errDelete } = await supabase.from('group_members').delete().eq('group_id', groupId);
+    const { error: errDelete } = await avecRetriesTimeout(() =>
+      supabase.from('group_members').delete().eq('group_id', groupId)
+    );
     if (errDelete) {
       setErreur("L'enregistrement a échoué. Réessaie dans un instant.");
       setEnregistrement(false);

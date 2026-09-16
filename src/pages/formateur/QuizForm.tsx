@@ -3,6 +3,7 @@ import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import AppLayout from '../../components/AppLayout';
 import { supabase } from '../../lib/supabaseClient';
 import { logActivity } from '../../lib/activityLog';
+import { avecRetriesTimeout } from '../../lib/retryTimeout';
 import { useAuth } from '../../hooks/useAuth';
 
 interface GroupRow {
@@ -155,10 +156,9 @@ export default function QuizForm() {
 
     // Resynchronise les groupes cibles : on efface puis on réinsère,
     // plus simple et plus sûr qu'un diff précis pour un petit nombre de lignes.
-    const { error: errDeleteGroupes } = await supabase
-      .from('quiz_groups')
-      .delete()
-      .eq('quiz_id', quizId as string);
+    const { error: errDeleteGroupes } = await avecRetriesTimeout(() =>
+      supabase.from('quiz_groups').delete().eq('quiz_id', quizId as string)
+    );
     if (errDeleteGroupes) {
       setErreur("Impossible de mettre à jour les groupes ciblés. Réessaie dans un instant.");
       setEnregistrement(false);
