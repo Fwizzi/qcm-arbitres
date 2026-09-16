@@ -192,10 +192,12 @@ export default function QuizForm() {
       return;
     }
 
-    // Duplique réellement les fichiers vidéo/image sur R2 (pas juste la
-    // référence) ; un échec partiel n'empêche pas d'accéder à la copie.
-    await supabase.functions.invoke('duplicate-quiz-media', { body: { quizId: nouveauId } });
-
+    // Les vidéos/images de la copie pointent volontairement vers les
+    // mêmes fichiers R2 que l'original (aucune requête Cloudflare
+    // nécessaire à la duplication). Seule l'ajout d'un NOUVEAU média sur
+    // la copie créera un fichier indépendant. La suppression est rendue
+    // sûre séparément (elle ne supprime un fichier que si plus aucune
+    // question, original ou copie, n'en a besoin).
     await logActivity(`a dupliqué le QCM « ${titre} »`, 'quiz', nouveauId);
     setDuplication(false);
     navigate(`/formateur/qcm/${nouveauId}`);
