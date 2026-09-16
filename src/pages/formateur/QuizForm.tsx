@@ -50,6 +50,7 @@ export default function QuizForm() {
   const [enregistrement, setEnregistrement] = useState(false);
   const [confirmationSuppression, setConfirmationSuppression] = useState(false);
   const [suppression, setSuppression] = useState(false);
+  const [duplication, setDuplication] = useState(false);
 
   const estPublie = statut === 'published';
 
@@ -179,6 +180,27 @@ export default function QuizForm() {
     }
   }
 
+  async function dupliquerQcm() {
+    if (!id) return;
+    setDuplication(true);
+    setErreur(null);
+
+    const { data: nouveauId, error } = await supabase.rpc('dupliquer_qcm', { p_quiz_id: id });
+    if (error || !nouveauId) {
+      setErreur('La duplication a échoué. Réessaie dans un instant.');
+      setDuplication(false);
+      return;
+    }
+
+    // Duplique réellement les fichiers vidéo/image sur R2 (pas juste la
+    // référence) ; un échec partiel n'empêche pas d'accéder à la copie.
+    await supabase.functions.invoke('duplicate-quiz-media', { body: { quizId: nouveauId } });
+
+    await logActivity(`a dupliqué le QCM « ${titre} »`, 'quiz', nouveauId);
+    setDuplication(false);
+    navigate(`/formateur/qcm/${nouveauId}`);
+  }
+
   if (loading) {
     return (
       <AppLayout>
@@ -304,10 +326,18 @@ export default function QuizForm() {
           </Link>
           <Link
             to={`/formateur/qcm/${id}/resultats`}
-            className="block w-full text-center border border-border rounded py-2 mb-3 text-sm"
+            className="block w-full text-center border border-border rounded py-2 mb-2 text-sm"
           >
             Voir les résultats
           </Link>
+          <button
+            type="button"
+            onClick={dupliquerQcm}
+            disabled={duplication}
+            className="block w-full text-center border border-border rounded py-2 mb-3 text-sm disabled:opacity-60"
+          >
+            {duplication ? 'Duplication…' : 'Dupliquer ce QCM'}
+          </button>
         </>
       )}
 
