@@ -89,12 +89,10 @@ export default function QuizAttemptResult() {
       setShowCorrection(quiz?.show_correction ?? false);
       setPeriodeFin(quiz?.period_end ?? null);
 
-      const { data: attempt } = await supabase
-        .from('quiz_attempts')
-        .select('score')
-        .eq('id', attemptId)
-        .single();
-      setScore(attempt?.score ?? null);
+      const { data: scoreEnDirect } = await supabase.rpc('calculer_score_global', {
+        p_attempt_id: attemptId,
+      });
+      setScore(scoreEnDirect ?? null);
 
       if (quiz?.show_correction) {
         const { data: detail, error } = await supabase.rpc('get_exam_results', {
