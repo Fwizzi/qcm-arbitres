@@ -65,8 +65,20 @@ export default function QuizResultats() {
 
     const { data: tentatives } = await supabase
       .from('quiz_attempts')
-      .select('id, user_id, status, score')
+      .select('id, user_id, status')
       .eq('quiz_id', quizId);
+
+    // Notes toujours recalculées en direct plutôt que de faire confiance
+    // à la valeur stockée (qui peut devenir périmée).
+    const scoresEnDirect = await Promise.all(
+      (tentatives ?? [])
+        .filter((t) => t.status !== 'in_progress')
+        .map(async (t) => {
+          const { data } = await supabase.rpc('calculer_score_global', { p_attempt_id: t.id });
+          return { attemptId: t.id, score: data as number | null };
+        })
+    );
+    const scoreParTentative = Object.fromEntries(scoresEnDirect.map((s) => [s.attemptId, s.score]));
 
     const resultat: LigneResultat[] = profils.map((p) => {
       const tentative = tentatives?.find((t) => t.user_id === p.id);
@@ -79,7 +91,7 @@ export default function QuizResultats() {
         full_name: p.full_name,
         email: p.email,
         statut,
-        score: tentative?.score ?? null,
+        score: tentative ? (scoreParTentative[tentative.id] ?? null) : null,
         attemptId: tentative?.id ?? null,
       };
     });

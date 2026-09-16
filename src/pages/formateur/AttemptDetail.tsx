@@ -69,10 +69,14 @@ export default function AttemptDetail() {
 
       const { data: attempt } = await supabase
         .from('quiz_attempts')
-        .select('score, user_id')
+        .select('user_id')
         .eq('id', attemptId)
         .single();
-      setScore(attempt?.score ?? null);
+
+      const { data: scoreEnDirect } = await supabase.rpc('calculer_score_global', {
+        p_attempt_id: attemptId,
+      });
+      setScore(scoreEnDirect ?? null);
 
       if (attempt?.user_id) {
         const { data: profil } = await supabase
