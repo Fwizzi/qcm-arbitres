@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import AppLayout from '../../components/AppLayout';
 import { supabase } from '../../lib/supabaseClient';
+import { avecRetriesTimeout } from '../../lib/retryTimeout';
 import { useAuth } from '../../hooks/useAuth';
 
 interface QuestionExamen {
@@ -162,11 +163,9 @@ export default function QuizAttempt() {
   async function enregistrerSelection(questionId: string, choix: Set<string>) {
     if (!attemptId) return;
     setErreurSelection(null);
-    const { error: errDelete } = await supabase
-      .from('selected_answers')
-      .delete()
-      .eq('attempt_id', attemptId)
-      .eq('question_id', questionId);
+    const { error: errDelete } = await avecRetriesTimeout(() =>
+      supabase.from('selected_answers').delete().eq('attempt_id', attemptId).eq('question_id', questionId)
+    );
     if (errDelete) {
       setErreurSelection("Ta réponse n'a pas pu être enregistrée. Recoche ta réponse dans un instant.");
       return;
