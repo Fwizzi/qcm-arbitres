@@ -155,7 +155,15 @@ export default function QuizForm() {
 
     // Resynchronise les groupes cibles : on efface puis on réinsère,
     // plus simple et plus sûr qu'un diff précis pour un petit nombre de lignes.
-    await supabase.from('quiz_groups').delete().eq('quiz_id', quizId as string);
+    const { error: errDeleteGroupes } = await supabase
+      .from('quiz_groups')
+      .delete()
+      .eq('quiz_id', quizId as string);
+    if (errDeleteGroupes) {
+      setErreur("Impossible de mettre à jour les groupes ciblés. Réessaie dans un instant.");
+      setEnregistrement(false);
+      return;
+    }
     if (groupesSelectionnes.size > 0) {
       await supabase
         .from('quiz_groups')

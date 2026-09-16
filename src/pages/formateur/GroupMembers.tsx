@@ -73,7 +73,12 @@ export default function GroupMembers() {
     setEnregistrement(true);
     setErreur(null);
 
-    await supabase.from('group_members').delete().eq('group_id', groupId);
+    const { error: errDelete } = await supabase.from('group_members').delete().eq('group_id', groupId);
+    if (errDelete) {
+      setErreur("L'enregistrement a échoué. Réessaie dans un instant.");
+      setEnregistrement(false);
+      return;
+    }
     if (selection.size > 0) {
       const { error } = await supabase
         .from('group_members')

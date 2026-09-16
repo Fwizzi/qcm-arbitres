@@ -205,7 +205,15 @@ export default function QuizQuestions() {
         .update({ type: t, media_url: mediaKey, text: txt, explanation: expl || null })
         .eq('id', idExistant);
       if (errUpdate) throw new Error('La modification de la question a échoué.');
-      await supabase.from('answer_options').delete().eq('question_id', idExistant);
+      const { error: errDeleteOptions } = await supabase
+        .from('answer_options')
+        .delete()
+        .eq('question_id', idExistant);
+      if (errDeleteOptions) {
+        throw new Error(
+          "Impossible de retirer les anciennes réponses avant d'enregistrer les nouvelles. Réessaie dans un instant."
+        );
+      }
     } else {
       const { data: question, error: errQuestion } = await supabase
         .from('questions')
