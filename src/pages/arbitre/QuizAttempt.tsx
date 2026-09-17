@@ -37,7 +37,17 @@ export default function QuizAttempt() {
   const soumettre = useCallback(
     async (id: string) => {
       setSoumission(true);
-      await supabase.rpc('submit_exam_attempt', { p_attempt_id: id });
+      setErreur(null);
+      const { error } = await avecRetriesTimeout(() =>
+        supabase.rpc('submit_exam_attempt', { p_attempt_id: id })
+      );
+      if (error) {
+        setSoumission(false);
+        setErreur(
+          "L'envoi de tes réponses a échoué. Vérifie ta connexion et réessaie — tes réponses déjà cochées sont conservées."
+        );
+        return;
+      }
       navigate(`/arbitre/qcm/${quizId}/resultat/${id}`, { replace: true });
     },
     [navigate, quizId]
@@ -197,7 +207,17 @@ export default function QuizAttempt() {
   if (erreur) {
     return (
       <AppLayout>
-        <p className="text-sm text-card-red">{erreur}</p>
+        <p className="text-sm text-card-red mb-3">{erreur}</p>
+        {attemptId && (
+          <button
+            type="button"
+            onClick={() => soumettre(attemptId)}
+            disabled={soumission}
+            className="w-full bg-pitch text-white font-medium rounded py-2 text-sm disabled:opacity-60"
+          >
+            {soumission ? 'Envoi…' : "Réessayer l'envoi"}
+          </button>
+        )}
       </AppLayout>
     );
   }
