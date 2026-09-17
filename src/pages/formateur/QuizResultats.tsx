@@ -163,18 +163,29 @@ export default function QuizResultats() {
         .select('attempt_id, option_id')
         .in('attempt_id', attemptIds);
 
+      // Structures construites UNE SEULE FOIS : recherche instantanée
+      // ensuite, au lieu de reparcourir toute la liste à chaque case
+      // (question × arbitre × réponse), qui devenait très lent avec
+      // beaucoup de questions et d'arbitres.
+      const selectionsParClef = new Set(
+        (selectionsData ?? []).map((s) => `${s.attempt_id}|${s.option_id}`)
+      );
+      const optionsParQuestion = new Map<string, { id: string; text: string }[]>();
+      for (const o of optionsData ?? []) {
+        if (!optionsParQuestion.has(o.question_id)) optionsParQuestion.set(o.question_id, []);
+        optionsParQuestion.get(o.question_id)!.push(o);
+      }
+      for (const liste of optionsParQuestion.values()) {
+        liste.sort((a, b) => a.id.localeCompare(b.id));
+      }
+
       (questionsData ?? []).forEach((q, index) => {
-        const optionsQuestion = (optionsData ?? [])
-          .filter((o) => o.question_id === q.id)
-          .sort((a, b) => a.id.localeCompare(b.id));
+        const optionsQuestion = optionsParQuestion.get(q.id) ?? [];
 
         const lignesFeuille = repondants.map((r) => {
           const ligne: Record<string, string> = { Arbitre: r.full_name };
           optionsQuestion.forEach((o) => {
-            const coche = (selectionsData ?? []).some(
-              (s) => s.attempt_id === r.attemptId && s.option_id === o.id
-            );
-            ligne[o.text] = coche ? 'X' : '';
+            ligne[o.text] = selectionsParClef.has(`${r.attemptId}|${o.id}`) ? 'X' : '';
           });
           return ligne;
         });
