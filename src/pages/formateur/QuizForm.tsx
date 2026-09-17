@@ -34,6 +34,7 @@ export default function QuizForm() {
   const { session } = useAuth();
 
   const [confirmation, setConfirmation] = useState(false);
+  const [popupPublication, setPopupPublication] = useState(false);
 
   const [titre, setTitre] = useState('');
   const [statut, setStatut] = useState<'draft' | 'published' | null>(null);
@@ -56,7 +57,11 @@ export default function QuizForm() {
   const estPublie = statut === 'published';
 
   useEffect(() => {
-    if ((location.state as { justSaved?: boolean } | null)?.justSaved) {
+    const etat = location.state as { justSaved?: boolean; justPublished?: boolean } | null;
+    if (etat?.justPublished) {
+      setPopupPublication(true);
+      navigate(location.pathname, { replace: true, state: null });
+    } else if (etat?.justSaved) {
       setConfirmation(true);
       navigate(location.pathname, { replace: true, state: null });
     }
@@ -171,7 +176,11 @@ export default function QuizForm() {
     }
 
     setEnregistrement(false);
-    navigate(`/formateur/qcm/${quizId}`, { replace: true, state: { justSaved: true } });
+    if (nouveauStatut === 'published') {
+      navigate(`/formateur/qcm/${quizId}`, { replace: true, state: { justPublished: true } });
+    } else {
+      navigate(`/formateur/qcm/${quizId}`, { replace: true, state: { justSaved: true } });
+    }
   }
 
   async function supprimerBrouillon() {
@@ -221,6 +230,25 @@ export default function QuizForm() {
 
   return (
     <AppLayout>
+      {popupPublication && (
+        <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-surface rounded-lg p-5 max-w-sm w-full text-center">
+            <p className="text-lg font-semibold mb-2">QCM publié ✓</p>
+            <p className="text-sm text-muted mb-4">
+              « {titre} » est maintenant publié. Il sera visible par les arbitres des groupes
+              ciblés pendant la période choisie.
+            </p>
+            <button
+              type="button"
+              onClick={() => setPopupPublication(false)}
+              className="w-full bg-pitch text-white font-medium rounded py-2 text-sm"
+            >
+              Fermer
+            </button>
+          </div>
+        </div>
+      )}
+
       <Link to="/formateur" className="text-sm text-muted underline mb-3 inline-block">
         ← Mes QCM
       </Link>
