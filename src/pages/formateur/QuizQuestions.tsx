@@ -69,6 +69,9 @@ export default function QuizQuestions() {
   const [erreurForm, setErreurForm] = useState<string | null>(null);
 
   const [envoisEnCours, setEnvoisEnCours] = useState<EnvoiEnCours[]>([]);
+  const [questionDepliee, setQuestionDepliee] = useState<string | null>(null);
+  const [mediaUrlsApercu, setMediaUrlsApercu] = useState<Record<string, string>>({});
+  const [chargementMediaApercu, setChargementMediaApercu] = useState<string | null>(null);
 
   async function charger() {
     if (!quizId) return;
@@ -244,6 +247,18 @@ export default function QuizQuestions() {
     setEnvoisEnCours((prev) => prev.filter((j) => j.id !== jobId));
   }
 
+  async function afficherMediaApercu(q: QuestionRow) {
+    if (!q.media_url || q.media_url === '__deleted__' || mediaUrlsApercu[q.id]) return;
+    setChargementMediaApercu(q.id);
+    const { data } = await supabase.functions.invoke('r2-upload-url', {
+      body: { action: 'read', key: q.media_url },
+    });
+    if (data?.readUrl) {
+      setMediaUrlsApercu((prev) => ({ ...prev, [q.id]: data.readUrl }));
+    }
+    setChargementMediaApercu(null);
+  }
+
   async function enregistrerQuestion(e: FormEvent) {
     e.preventDefault();
     setErreurForm(null);
@@ -401,6 +416,60 @@ export default function QuizQuestions() {
                   </div>
                 )}
               </div>
+
+              <button
+                type="button"
+                onClick={() => setQuestionDepliee(questionDepliee === q.id ? null : q.id)}
+                className="text-xs text-muted underline mt-2"
+              >
+                {questionDepliee === q.id ? 'Masquer les réponses' : 'Voir les réponses'}
+              </button>
+
+              {questionDepliee === q.id && (
+                <div className="mt-2 pt-2 border-t border-border">
+                  {q.type !== 'text' && q.media_url && q.media_url !== '__deleted__' && (
+                    <div className="mb-2">
+                      {mediaUrlsApercu[q.id] ? (
+                        q.type === 'video' ? (
+                          <video src={mediaUrlsApercu[q.id]} controls className="w-full rounded max-h-40" />
+                        ) : (
+                          <img src={mediaUrlsApercu[q.id]} alt="" className="w-full rounded max-h-40 object-contain" />
+                        )
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => afficherMediaApercu(q)}
+                          disabled={chargementMediaApercu === q.id}
+                          className="text-xs border border-border rounded px-3 py-1.5"
+                        >
+                          {chargementMediaApercu === q.id
+                            ? 'Chargement…'
+                            : q.type === 'video'
+                              ? 'Revoir la vidéo'
+                              : "Revoir l'image"}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-1.5">
+                    {q.options.map((o) => (
+                      <div
+                        key={o.id}
+                        className={
+                          'flex items-center gap-2 border rounded px-3 py-2 text-sm ' +
+                          (o.is_correct ? 'border-pitch bg-pitch-light' : 'border-border')
+                        }
+                      >
+                        <input type="checkbox" checked={o.is_correct} disabled readOnly />
+                        <span className="flex-1">{o.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {q.explanation && (
+                    <p className="text-xs text-muted mt-2">Explication : {q.explanation}</p>
+                  )}
+                </div>
+              )}
             </li>
           ))}
         </ul>
