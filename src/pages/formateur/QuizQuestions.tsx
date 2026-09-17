@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import AppLayout from '../../components/AppLayout';
+import QuizTabs from '../../components/QuizTabs';
 import { supabase } from '../../lib/supabaseClient';
 import { extraireErreurFonction } from '../../lib/functionsError';
 import { avecRetriesTimeout } from '../../lib/retryTimeout';
@@ -323,9 +324,7 @@ export default function QuizQuestions() {
 
   return (
     <AppLayout>
-      <Link to={`/formateur/qcm/${quizId}`} className="text-sm text-muted underline mb-3 inline-block">
-        ← Paramètres du QCM
-      </Link>
+      {quizId && <QuizTabs quizId={quizId} />}
       <h1 className="text-lg font-semibold mb-4">Questions</h1>
 
       {loading && <p className="text-sm text-muted">Chargement…</p>}

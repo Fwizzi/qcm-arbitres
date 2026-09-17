@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import AppLayout from '../../components/AppLayout';
 import FormateurNav from '../../components/FormateurNav';
 import { supabase } from '../../lib/supabaseClient';
@@ -32,9 +32,11 @@ function formatDate(d: string) {
 
 export default function FormateurDashboard() {
   const { session } = useAuth();
+  const navigate = useNavigate();
   const [quizzes, setQuizzes] = useState<QuizRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [creation, setCreation] = useState(false);
 
   useEffect(() => {
     async function charger() {
@@ -58,17 +60,51 @@ export default function FormateurDashboard() {
     charger();
   }, [session]);
 
+  async function creerNouveauQcm() {
+    if (!session) return;
+    setCreation(true);
+    setError(null);
+
+    const maintenant = new Date();
+    const dansUneSemaine = new Date(maintenant.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const { data, error } = await supabase
+      .from('quizzes')
+      .insert({
+        formateur_id: session.user.id,
+        title: 'Nouveau QCM',
+        status: 'draft',
+        time_limit_minutes: 20,
+        show_score: true,
+        show_correction: true,
+        show_expected_count: true,
+        period_start: maintenant.toISOString(),
+        period_end: dansUneSemaine.toISOString(),
+      })
+      .select('id')
+      .single();
+
+    setCreation(false);
+    if (error || !data) {
+      setError('La création du QCM a échoué. Réessaie dans un instant.');
+      return;
+    }
+    navigate(`/formateur/qcm/${data.id}`);
+  }
+
   return (
     <AppLayout>
       <FormateurNav />
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-lg font-semibold">Mes QCM</h1>
-        <Link
-          to="/formateur/qcm/nouveau"
-          className="text-sm border border-border rounded px-3 py-1.5"
+        <button
+          type="button"
+          onClick={creerNouveauQcm}
+          disabled={creation}
+          className="text-sm border border-border rounded px-3 py-1.5 disabled:opacity-60"
         >
-          + Nouveau
-        </Link>
+          {creation ? 'Création…' : '+ Nouveau'}
+        </button>
       </div>
 
       {loading && <p className="text-sm text-muted">Chargement…</p>}

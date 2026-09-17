@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import AppLayout from '../../components/AppLayout';
+import QuizTabs from '../../components/QuizTabs';
 import { supabase } from '../../lib/supabaseClient';
 import { logActivity } from '../../lib/activityLog';
 
@@ -226,9 +227,7 @@ export default function QuizResultats() {
 
   return (
     <AppLayout>
-      <Link to={`/formateur/qcm/${quizId}`} className="text-sm text-muted underline mb-3 inline-block">
-        ← Paramètres du QCM
-      </Link>
+      {quizId && <QuizTabs quizId={quizId} />}
       <h1 className="text-lg font-semibold mb-1">{titre}</h1>
       <p className="text-sm text-muted mb-4">
         {repondus.length}/{lignes.length} répondus

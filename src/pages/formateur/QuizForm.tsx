@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import AppLayout from '../../components/AppLayout';
+import QuizTabs from '../../components/QuizTabs';
 import { supabase } from '../../lib/supabaseClient';
 import { logActivity } from '../../lib/activityLog';
 import { avecRetriesTimeout } from '../../lib/retryTimeout';
@@ -28,7 +29,6 @@ function versDatetimeLocal(iso: string): string {
 
 export default function QuizForm() {
   const { id } = useParams();
-  const estNouveau = !id || id === 'nouveau';
   const navigate = useNavigate();
   const location = useLocation();
   const { session } = useAuth();
@@ -47,7 +47,7 @@ export default function QuizForm() {
   const [groupes, setGroupes] = useState<GroupRow[]>([]);
   const [groupesSelectionnes, setGroupesSelectionnes] = useState<Set<string>>(new Set());
 
-  const [loading, setLoading] = useState(!estNouveau);
+  const [loading, setLoading] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
   const [enregistrement, setEnregistrement] = useState(false);
   const [confirmationSuppression, setConfirmationSuppression] = useState(false);
@@ -79,7 +79,7 @@ export default function QuizForm() {
       const { data: groupesData } = await supabase.from('groups').select('id, name').order('name');
       setGroupes(groupesData ?? []);
 
-      if (!estNouveau && id) {
+      if (id) {
         const { data: quiz, error } = await supabase
           .from('quizzes')
           .select('title, status, time_limit_minutes, show_score, show_correction, show_expected_count, period_start, period_end')
@@ -107,7 +107,7 @@ export default function QuizForm() {
       setLoading(false);
     }
     charger();
-  }, [id, estNouveau]);
+  }, [id]);
 
   function basculerGroupe(groupId: string) {
     setGroupesSelectionnes((prev) => {
@@ -138,31 +138,18 @@ export default function QuizForm() {
       payload.published_at = new Date().toISOString();
     }
 
-    let quizId = id;
-
-    if (estNouveau) {
-      const { data, error } = await supabase.from('quizzes').insert(payload).select('id').single();
-      if (error || !data) {
-        setErreur(traduireErreur(error?.message));
-        setEnregistrement(false);
-        return;
-      }
-      quizId = data.id;
-      await logActivity(`a créé le QCM « ${titre} »`, 'quiz', quizId);
-    } else {
-      const { error } = await supabase.from('quizzes').update(payload).eq('id', id);
-      if (error) {
-        setErreur(traduireErreur(error.message));
-        setEnregistrement(false);
-        return;
-      }
-      await logActivity(`a modifié le QCM « ${titre} »`, 'quiz', id);
+    const { error } = await supabase.from('quizzes').update(payload).eq('id', id);
+    if (error) {
+      setErreur(traduireErreur(error.message));
+      setEnregistrement(false);
+      return;
     }
+    await logActivity(`a modifié le QCM « ${titre} »`, 'quiz', id);
 
     // Resynchronise les groupes cibles : on efface puis on réinsère,
     // plus simple et plus sûr qu'un diff précis pour un petit nombre de lignes.
     const { error: errDeleteGroupes } = await avecRetriesTimeout(() =>
-      supabase.from('quiz_groups').delete().eq('quiz_id', quizId as string)
+      supabase.from('quiz_groups').delete().eq('quiz_id', id as string)
     );
     if (errDeleteGroupes) {
       setErreur("Impossible de mettre à jour les groupes ciblés. Réessaie dans un instant.");
@@ -172,14 +159,14 @@ export default function QuizForm() {
     if (groupesSelectionnes.size > 0) {
       await supabase
         .from('quiz_groups')
-        .insert(Array.from(groupesSelectionnes).map((groupId) => ({ quiz_id: quizId, group_id: groupId })));
+        .insert(Array.from(groupesSelectionnes).map((groupId) => ({ quiz_id: id, group_id: groupId })));
     }
 
     setEnregistrement(false);
     if (nouveauStatut === 'published') {
-      navigate(`/formateur/qcm/${quizId}`, { replace: true, state: { justPublished: true } });
+      navigate(`/formateur/qcm/${id}`, { replace: true, state: { justPublished: true } });
     } else {
-      navigate(`/formateur/qcm/${quizId}`, { replace: true, state: { justSaved: true } });
+      navigate(`/formateur/qcm/${id}`, { replace: true, state: { justSaved: true } });
     }
   }
 
@@ -252,6 +239,7 @@ export default function QuizForm() {
       <Link to="/formateur" className="text-sm text-muted underline mb-3 inline-block">
         ← Mes QCM
       </Link>
+      {id && <QuizTabs quizId={id} />}
       <h1 className="text-lg font-semibold mb-4">Paramètres du QCM</h1>
 
       {confirmation && (
@@ -354,30 +342,14 @@ export default function QuizForm() {
         ))}
       </div>
 
-      {!estNouveau && (
-        <>
-          <Link
-            to={`/formateur/qcm/${id}/questions`}
-            className="block w-full text-center border border-border rounded py-2 mb-2 text-sm"
-          >
-            Gérer les questions
-          </Link>
-          <Link
-            to={`/formateur/qcm/${id}/resultats`}
-            className="block w-full text-center border border-border rounded py-2 mb-2 text-sm"
-          >
-            Voir les résultats
-          </Link>
-          <button
-            type="button"
-            onClick={dupliquerQcm}
-            disabled={duplication}
-            className="block w-full text-center border border-border rounded py-2 mb-3 text-sm disabled:opacity-60"
-          >
-            {duplication ? 'Duplication…' : 'Dupliquer ce QCM'}
-          </button>
-        </>
-      )}
+      <button
+        type="button"
+        onClick={dupliquerQcm}
+        disabled={duplication}
+        className="block w-full text-center border border-border rounded py-2 mb-3 text-sm disabled:opacity-60"
+      >
+        {duplication ? 'Duplication…' : 'Dupliquer ce QCM'}
+      </button>
 
       {erreur && (
         <p role="alert" className="text-sm text-card-red bg-card-red-bg rounded px-3 py-2 mb-3">
@@ -406,7 +378,7 @@ export default function QuizForm() {
         </div>
       )}
 
-      {!estNouveau && !estPublie && (
+      {!estPublie && (
         <>
           {!confirmationSuppression ? (
             <button
