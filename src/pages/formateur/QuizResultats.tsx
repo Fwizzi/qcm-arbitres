@@ -179,13 +179,28 @@ export default function QuizResultats() {
         liste.sort((a, b) => a.id.localeCompare(b.id));
       }
 
+      // Deux réponses d'une même question peuvent avoir exactement le
+      // même texte (ex. données de test tapées rapidement). Comme le
+      // texte sert de nom de colonne Excel, on numérote les doublons
+      // pour ne jamais les faire s'écraser l'un l'autre.
+      const entetesParOption = new Map<string, string>();
+      for (const liste of optionsParQuestion.values()) {
+        const occurrences = new Map<string, number>();
+        for (const o of liste) {
+          const n = (occurrences.get(o.text) ?? 0) + 1;
+          occurrences.set(o.text, n);
+          entetesParOption.set(o.id, n > 1 ? `${o.text} (${n})` : o.text);
+        }
+      }
+
       (questionsData ?? []).forEach((q, index) => {
         const optionsQuestion = optionsParQuestion.get(q.id) ?? [];
 
         const lignesFeuille = repondants.map((r) => {
           const ligne: Record<string, string> = { Arbitre: r.full_name };
           optionsQuestion.forEach((o) => {
-            ligne[o.text] = selectionsParClef.has(`${r.attemptId}|${o.id}`) ? 'X' : '';
+            const entete = entetesParOption.get(o.id) ?? o.text;
+            ligne[entete] = selectionsParClef.has(`${r.attemptId}|${o.id}`) ? 'X' : '';
           });
           return ligne;
         });
