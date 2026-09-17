@@ -187,8 +187,8 @@ export default function QuizQuestions() {
     return data.key as string;
   }
 
-  // Enregistre la question (et ses réponses) en base, une fois qu'on
-  // connaît la clé média finale (ou null pour une question texte).
+  // Enregistre la question (et ses réponses) en base, en UN SEUL appel
+  // au serveur (au lieu de 2 ou 3 séparés), pour réduire le temps total.
   async function enregistrerQuestionEnBase(
     mediaKey: string | null,
     t: QuestionType,
@@ -198,43 +198,23 @@ export default function QuizQuestions() {
     idExistant: string | null,
     ordreIndex: number
   ) {
-    let questionId = idExistant;
-
-    if (idExistant) {
-      const { error: errUpdate } = await supabase
-        .from('questions')
-        .update({ type: t, media_url: mediaKey, text: txt, explanation: expl || null })
-        .eq('id', idExistant);
-      if (errUpdate) throw new Error('La modification de la question a échoué.');
-      const { error: errDeleteOptions } = await avecRetriesTimeout(() =>
-        supabase.from('answer_options').delete().eq('question_id', idExistant)
-      );
-      if (errDeleteOptions) {
-        throw new Error(
-          "Impossible de retirer les anciennes réponses avant d'enregistrer les nouvelles. Réessaie dans un instant."
-        );
-      }
-    } else {
-      const { data: question, error: errQuestion } = await supabase
-        .from('questions')
-        .insert({
-          quiz_id: quizId,
-          type: t,
-          media_url: mediaKey,
-          text: txt,
-          explanation: expl || null,
-          order_index: ordreIndex,
-        })
-        .select('id')
-        .single();
-      if (errQuestion || !question) throw new Error("L'enregistrement de la question a échoué.");
-      questionId = question.id;
-    }
-
-    const { error: errOptions } = await supabase.from('answer_options').insert(
-      opts.map((o) => ({ question_id: questionId, text: o.text, is_correct: o.is_correct }))
+    const { error } = await avecRetriesTimeout(() =>
+      supabase.rpc('enregistrer_question', {
+        p_quiz_id: quizId,
+        p_question_id: idExistant,
+        p_type: t,
+        p_media_url: mediaKey,
+        p_text: txt,
+        p_explanation: expl || null,
+        p_order_index: ordreIndex,
+        p_options: opts.map((o) => ({ text: o.text, is_correct: o.is_correct })),
+      })
     );
-    if (errOptions) throw new Error("L'enregistrement des réponses a échoué.");
+    if (error) {
+      throw new Error(
+        idExistant ? 'La modification de la question a échoué. Réessaie dans un instant.' : "L'enregistrement de la question a échoué. Réessaie dans un instant."
+      );
+    }
   }
 
   // Envoie le média et enregistre la question en tâche de fond, sans
