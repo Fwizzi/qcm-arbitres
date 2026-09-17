@@ -3,11 +3,6 @@ import AppLayout from '../../components/AppLayout';
 import AdminNav from '../../components/AdminNav';
 import { supabase } from '../../lib/supabaseClient';
 
-function premierJourDuMoisLocal(): string {
-  const d = new Date();
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)).toISOString().slice(0, 10);
-}
-
 export default function Reglages() {
   const [loading, setLoading] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -23,7 +18,14 @@ export default function Reglages() {
   const [quotaClasseB, setQuotaClasseB] = useState(9000000);
   const [quotaGo, setQuotaGo] = useState(9);
 
-  const [usage, setUsage] = useState({ class_a_count: 0, class_b_count: 0, bytes_uploaded: 0 });
+  const [usageReel, setUsageReel] = useState<{
+    classA: number;
+    classB: number;
+    objectCount: number | null;
+    payloadSizeOctets: number | null;
+  } | null>(null);
+  const [erreurUsage, setErreurUsage] = useState<string | null>(null);
+  const [chargementUsage, setChargementUsage] = useState(true);
 
   useEffect(() => {
     async function charger() {
@@ -31,11 +33,6 @@ export default function Reglages() {
       setErreur(null);
 
       const { data: reglages, error: err1 } = await supabase.from('app_settings').select('key, value');
-      const { data: usageData } = await supabase
-        .from('r2_usage_monthly')
-        .select('class_a_count, class_b_count, bytes_uploaded')
-        .eq('month', premierJourDuMoisLocal())
-        .maybeSingle();
 
       if (err1) {
         setErreur('Impossible de charger les réglages. Réessaie dans un instant.');
@@ -58,10 +55,26 @@ export default function Reglages() {
       setQuotaClasseB(Number(val('r2_quota_class_b_per_month') ?? 9000000));
       setQuotaGo(Number(val('r2_quota_gb_uploaded_per_month') ?? 9));
 
-      setUsage(usageData ?? { class_a_count: 0, class_b_count: 0, bytes_uploaded: 0 });
       setLoading(false);
     }
     charger();
+  }, []);
+
+  useEffect(() => {
+    async function chargerUsageReel() {
+      setChargementUsage(true);
+      setErreurUsage(null);
+      const { data, error } = await supabase.functions.invoke('r2-usage-reel');
+      if (error || data?.error) {
+        setErreurUsage(
+          data?.error ?? "Impossible de récupérer les données réelles de Cloudflare pour l'instant."
+        );
+      } else {
+        setUsageReel(data);
+      }
+      setChargementUsage(false);
+    }
+    chargerUsageReel();
   }, []);
 
   async function enregistrer(e: FormEvent) {
@@ -123,37 +136,50 @@ export default function Reglages() {
 
       <p className="text-sm font-medium mb-2">Usage Cloudflare R2 ce mois-ci</p>
       <div className="bg-surface border border-border rounded p-3 mb-6 text-sm">
-        <div className="mb-3">
-          <div className="flex justify-between text-xs text-muted mb-0.5">
-            <span>Requêtes d'envoi (Classe A)</span>
-            <span>
-              {usage.class_a_count.toLocaleString('fr-FR')} / {quotaClasseA.toLocaleString('fr-FR')}
-            </span>
-          </div>
-          {barre(usage.class_a_count, quotaClasseA)}
-        </div>
-        <div className="mb-3">
-          <div className="flex justify-between text-xs text-muted mb-0.5">
-            <span>Requêtes de lecture (Classe B)</span>
-            <span>
-              {usage.class_b_count.toLocaleString('fr-FR')} / {quotaClasseB.toLocaleString('fr-FR')}
-            </span>
-          </div>
-          {barre(usage.class_b_count, quotaClasseB)}
-        </div>
-        <div>
-          <div className="flex justify-between text-xs text-muted mb-0.5">
-            <span>Volume envoyé</span>
-            <span>
-              {(usage.bytes_uploaded / 1_000_000_000).toFixed(2)} / {quotaGo} Go
-            </span>
-          </div>
-          {barre(usage.bytes_uploaded / 1_000_000_000, quotaGo)}
-        </div>
-        <p className="text-xs text-muted mt-3">
-          Estimation basée sur les opérations déclenchées par l'application (pas une donnée
-          officielle Cloudflare). Remise à zéro chaque mois.
-        </p>
+        {chargementUsage && <p className="text-xs text-muted">Chargement des données réelles…</p>}
+
+        {!chargementUsage && erreurUsage && (
+          <p className="text-xs text-card-red">{erreurUsage}</p>
+        )}
+
+        {!chargementUsage && usageReel && (
+          <>
+            <div className="mb-3">
+              <div className="flex justify-between text-xs text-muted mb-0.5">
+                <span>Requêtes d'envoi (Classe A)</span>
+                <span>
+                  {usageReel.classA.toLocaleString('fr-FR')} / {quotaClasseA.toLocaleString('fr-FR')}
+                </span>
+              </div>
+              {barre(usageReel.classA, quotaClasseA)}
+            </div>
+            <div className="mb-3">
+              <div className="flex justify-between text-xs text-muted mb-0.5">
+                <span>Requêtes de lecture (Classe B)</span>
+                <span>
+                  {usageReel.classB.toLocaleString('fr-FR')} / {quotaClasseB.toLocaleString('fr-FR')}
+                </span>
+              </div>
+              {barre(usageReel.classB, quotaClasseB)}
+            </div>
+            {usageReel.payloadSizeOctets !== null && (
+              <div>
+                <div className="flex justify-between text-xs text-muted mb-0.5">
+                  <span>Stockage total actuel</span>
+                  <span>
+                    {(usageReel.payloadSizeOctets / 1_000_000_000).toFixed(2)} / {quotaGo} Go
+                    {usageReel.objectCount !== null && ` · ${usageReel.objectCount.toLocaleString('fr-FR')} fichiers`}
+                  </span>
+                </div>
+                {barre(usageReel.payloadSizeOctets / 1_000_000_000, quotaGo)}
+              </div>
+            )}
+            <p className="text-xs text-muted mt-3">
+              Données réelles, directement depuis l'API Cloudflare (pas une estimation). Les requêtes
+              se remettent à 0 chaque mois ; le stockage est l'état actuel du compte.
+            </p>
+          </>
+        )}
       </div>
 
       <form onSubmit={enregistrer}>
@@ -178,7 +204,7 @@ export default function Reglages() {
             />
           </label>
           <label className="text-sm">
-            Quota Go envoyés / mois
+            Quota Go de stockage total
             <input
               type="number"
               value={quotaGo}
