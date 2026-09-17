@@ -24,6 +24,7 @@ export default function QuizResultats() {
   const [erreur, setErreur] = useState<string | null>(null);
   const [confirmationSuppression, setConfirmationSuppression] = useState(false);
   const [suppression, setSuppression] = useState(false);
+  const [exportEnCours, setExportEnCours] = useState<'excel' | 'csv' | null>(null);
 
   async function charger() {
     if (!quizId) return;
@@ -126,93 +127,107 @@ export default function QuizResultats() {
   }
 
   function exporterCsv() {
-    const donnees = donneesExport();
-    const entetes = Object.keys(donnees[0] ?? { Nom: '', 'E-mail': '', Statut: '', Score: '' });
-    const lignesCsv = [
-      entetes.join(';'),
-      ...donnees.map((d) => entetes.map((e) => `"${String(d[e as keyof typeof d]).replace(/"/g, '""')}"`).join(';')),
-    ];
-    const blob = new Blob([lignesCsv.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    telecharger(blob, `${titre}.csv`);
+    setExportEnCours('csv');
+    try {
+      const donnees = donneesExport();
+      const entetes = Object.keys(donnees[0] ?? { Nom: '', 'E-mail': '', Statut: '', Score: '' });
+      const lignesCsv = [
+        entetes.join(';'),
+        ...donnees.map((d) => entetes.map((e) => `"${String(d[e as keyof typeof d]).replace(/"/g, '""')}"`).join(';')),
+      ];
+      const blob = new Blob([lignesCsv.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      telecharger(blob, `${titre}.csv`);
+    } catch {
+      setErreur("L'export CSV a échoué. Réessaie dans un instant.");
+    } finally {
+      setExportEnCours(null);
+    }
   }
 
   async function exporterExcel() {
-    const XLSX = await import('xlsx');
-    const classeur = XLSX.utils.book_new();
+    setExportEnCours('excel');
+    try {
+      const XLSX = await import('xlsx');
+      const classeur = XLSX.utils.book_new();
 
-    const feuilleSynthese = XLSX.utils.json_to_sheet(donneesExport());
-    XLSX.utils.book_append_sheet(classeur, feuilleSynthese, 'Résultats');
+      const feuilleSynthese = XLSX.utils.json_to_sheet(donneesExport());
+      XLSX.utils.book_append_sheet(classeur, feuilleSynthese, 'Résultats');
 
-    const repondants = lignes.filter((l) => l.statut === 'soumis' && l.attemptId);
-    if (repondants.length > 0 && quizId) {
-      const { data: questionsData } = await supabase
-        .from('questions')
-        .select('id, text, order_index')
-        .eq('quiz_id', quizId)
-        .order('order_index');
+      const repondants = lignes.filter((l) => l.statut === 'soumis' && l.attemptId);
+      if (repondants.length > 0 && quizId) {
+        const { data: questionsData } = await supabase
+          .from('questions')
+          .select('id, text, order_index')
+          .eq('quiz_id', quizId)
+          .order('order_index');
 
-      const questionIds = (questionsData ?? []).map((q) => q.id);
-      const { data: optionsData } =
-        questionIds.length > 0
-          ? await supabase.from('answer_options').select('id, question_id, text').in('question_id', questionIds)
-          : { data: [] };
+        const questionIds = (questionsData ?? []).map((q) => q.id);
+        const { data: optionsData } =
+          questionIds.length > 0
+            ? await supabase.from('answer_options').select('id, question_id, text').in('question_id', questionIds)
+            : { data: [] };
 
-      const attemptIds = repondants.map((r) => r.attemptId as string);
-      const { data: selectionsData } = await supabase
-        .from('selected_answers')
-        .select('attempt_id, option_id')
-        .in('attempt_id', attemptIds);
+        const attemptIds = repondants.map((r) => r.attemptId as string);
+        const { data: selectionsData } = await supabase
+          .from('selected_answers')
+          .select('attempt_id, option_id')
+          .in('attempt_id', attemptIds);
 
-      // Structures construites UNE SEULE FOIS : recherche instantanée
-      // ensuite, au lieu de reparcourir toute la liste à chaque case
-      // (question × arbitre × réponse), qui devenait très lent avec
-      // beaucoup de questions et d'arbitres.
-      const selectionsParClef = new Set(
-        (selectionsData ?? []).map((s) => `${s.attempt_id}|${s.option_id}`)
-      );
-      const optionsParQuestion = new Map<string, { id: string; text: string }[]>();
-      for (const o of optionsData ?? []) {
-        if (!optionsParQuestion.has(o.question_id)) optionsParQuestion.set(o.question_id, []);
-        optionsParQuestion.get(o.question_id)!.push(o);
-      }
-      for (const liste of optionsParQuestion.values()) {
-        liste.sort((a, b) => a.id.localeCompare(b.id));
-      }
-
-      // Deux réponses d'une même question peuvent avoir exactement le
-      // même texte (ex. données de test tapées rapidement). Comme le
-      // texte sert de nom de colonne Excel, on numérote les doublons
-      // pour ne jamais les faire s'écraser l'un l'autre.
-      const entetesParOption = new Map<string, string>();
-      for (const liste of optionsParQuestion.values()) {
-        const occurrences = new Map<string, number>();
-        for (const o of liste) {
-          const n = (occurrences.get(o.text) ?? 0) + 1;
-          occurrences.set(o.text, n);
-          entetesParOption.set(o.id, n > 1 ? `${o.text} (${n})` : o.text);
+        // Structures construites UNE SEULE FOIS : recherche instantanée
+        // ensuite, au lieu de reparcourir toute la liste à chaque case
+        // (question × arbitre × réponse), qui devenait très lent avec
+        // beaucoup de questions et d'arbitres.
+        const selectionsParClef = new Set(
+          (selectionsData ?? []).map((s) => `${s.attempt_id}|${s.option_id}`)
+        );
+        const optionsParQuestion = new Map<string, { id: string; text: string }[]>();
+        for (const o of optionsData ?? []) {
+          if (!optionsParQuestion.has(o.question_id)) optionsParQuestion.set(o.question_id, []);
+          optionsParQuestion.get(o.question_id)!.push(o);
         }
+        for (const liste of optionsParQuestion.values()) {
+          liste.sort((a, b) => a.id.localeCompare(b.id));
+        }
+
+        // Deux réponses d'une même question peuvent avoir exactement le
+        // même texte (ex. données de test tapées rapidement). Comme le
+        // texte sert de nom de colonne Excel, on numérote les doublons
+        // pour ne jamais les faire s'écraser l'un l'autre.
+        const entetesParOption = new Map<string, string>();
+        for (const liste of optionsParQuestion.values()) {
+          const occurrences = new Map<string, number>();
+          for (const o of liste) {
+            const n = (occurrences.get(o.text) ?? 0) + 1;
+            occurrences.set(o.text, n);
+            entetesParOption.set(o.id, n > 1 ? `${o.text} (${n})` : o.text);
+          }
+        }
+
+        (questionsData ?? []).forEach((q, index) => {
+          const optionsQuestion = optionsParQuestion.get(q.id) ?? [];
+
+          const lignesFeuille = repondants.map((r) => {
+            const ligne: Record<string, string> = { Arbitre: r.full_name };
+            optionsQuestion.forEach((o) => {
+              const entete = entetesParOption.get(o.id) ?? o.text;
+              ligne[entete] = selectionsParClef.has(`${r.attemptId}|${o.id}`) ? 'X' : '';
+            });
+            return ligne;
+          });
+
+          const feuille = XLSX.utils.json_to_sheet(lignesFeuille);
+          // Excel limite les noms de feuille à 31 caractères et interdit : \ / ? * [ ]
+          const nomFeuille = `Q${index + 1} - ${q.text}`.replace(/[:\\/?*[\]]/g, '').slice(0, 31);
+          XLSX.utils.book_append_sheet(classeur, feuille, nomFeuille);
+        });
       }
 
-      (questionsData ?? []).forEach((q, index) => {
-        const optionsQuestion = optionsParQuestion.get(q.id) ?? [];
-
-        const lignesFeuille = repondants.map((r) => {
-          const ligne: Record<string, string> = { Arbitre: r.full_name };
-          optionsQuestion.forEach((o) => {
-            const entete = entetesParOption.get(o.id) ?? o.text;
-            ligne[entete] = selectionsParClef.has(`${r.attemptId}|${o.id}`) ? 'X' : '';
-          });
-          return ligne;
-        });
-
-        const feuille = XLSX.utils.json_to_sheet(lignesFeuille);
-        // Excel limite les noms de feuille à 31 caractères et interdit : \ / ? * [ ]
-        const nomFeuille = `Q${index + 1} - ${q.text}`.replace(/[:\\/?*[\]]/g, '').slice(0, 31);
-        XLSX.utils.book_append_sheet(classeur, feuille, nomFeuille);
-      });
+      XLSX.writeFile(classeur, `${titre}.xlsx`);
+    } catch {
+      setErreur("L'export Excel a échoué. Réessaie dans un instant.");
+    } finally {
+      setExportEnCours(null);
     }
-
-    XLSX.writeFile(classeur, `${titre}.xlsx`);
   }
 
   function telecharger(blob: Blob, nomFichier: string) {
@@ -266,20 +281,30 @@ export default function QuizResultats() {
         <button
           type="button"
           onClick={exporterExcel}
-          disabled={lignes.length === 0}
+          disabled={lignes.length === 0 || exportEnCours !== null}
           className="flex-1 text-sm border border-border rounded py-1.5 disabled:opacity-50"
         >
-          Export Excel
+          {exportEnCours === 'excel' ? 'Génération…' : 'Export Excel'}
         </button>
         <button
           type="button"
           onClick={exporterCsv}
-          disabled={lignes.length === 0}
+          disabled={lignes.length === 0 || exportEnCours !== null}
           className="flex-1 text-sm border border-border rounded py-1.5 disabled:opacity-50"
         >
-          Export CSV
+          {exportEnCours === 'csv' ? 'Génération…' : 'Export CSV'}
         </button>
       </div>
+
+      {exportEnCours && (
+        <div className="mb-2">
+          <div className="h-1.5 bg-pitch rounded animate-pulse" />
+          <p className="text-xs text-muted mt-1">
+            Export {exportEnCours === 'excel' ? 'Excel' : 'CSV'} en cours…
+          </p>
+        </div>
+      )}
+
       <p className="text-xs text-muted mb-6">
         Excel inclut le détail question par question (une feuille par question) ; le CSV ne
         contient que la synthèse des scores.
