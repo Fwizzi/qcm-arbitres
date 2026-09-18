@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import AppLayout from '../../components/AppLayout';
 import { supabase } from '../../lib/supabaseClient';
@@ -34,10 +34,18 @@ export default function QuizAttempt() {
   const [tempsRestant, setTempsRestant] = useState(0);
   const [soumission, setSoumission] = useState(false);
 
+  // Anti-rebond : si l'arbitre coche plusieurs cases très vite sur la
+  // même question, on n'envoie que le dernier état, une seule fois,
+  // après une courte pause — deux envois concurrents pour la même
+  // question pouvaient se marcher dessus en base (double insertion).
+  const minuteursEnvoi = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const dernieresSelections = useRef<Record<string, Set<string>>>({});
+
   const soumettre = useCallback(
     async (id: string) => {
       setSoumission(true);
       setErreur(null);
+      await viderEnvoisEnAttente();
       const { error } = await avecRetriesTimeout(() =>
         supabase.rpc('submit_exam_attempt', { p_attempt_id: id })
       );
@@ -50,7 +58,7 @@ export default function QuizAttempt() {
       }
       navigate(`/arbitre/qcm/${quizId}/resultat/${id}`, { replace: true });
     },
-    [navigate, quizId]
+    [navigate, quizId, attemptId]
   );
 
   useEffect(() => {
@@ -157,7 +165,7 @@ export default function QuizAttempt() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questionActuelle]);
 
-  async function basculerOption(questionId: string, optionId: string, max: number) {
+  function basculerOption(questionId: string, optionId: string, max: number) {
     if (!attemptId) return;
     const actuel = new Set(selections[questionId] ?? []);
     if (actuel.has(optionId)) {
@@ -167,7 +175,27 @@ export default function QuizAttempt() {
       actuel.add(optionId);
     }
     setSelections((prev) => ({ ...prev, [questionId]: actuel }));
-    await enregistrerSelection(questionId, actuel);
+
+    dernieresSelections.current[questionId] = actuel;
+    if (minuteursEnvoi.current[questionId]) {
+      clearTimeout(minuteursEnvoi.current[questionId]);
+    }
+    minuteursEnvoi.current[questionId] = setTimeout(() => {
+      delete minuteursEnvoi.current[questionId];
+      enregistrerSelection(questionId, actuel);
+    }, 400);
+  }
+
+  // Envoie immédiatement toute sélection encore en attente (anti-rebond
+  // pas encore déclenché) — appelé juste avant la soumission finale,
+  // pour être sûr que rien ne se perde.
+  async function viderEnvoisEnAttente() {
+    const enAttente = Object.keys(minuteursEnvoi.current);
+    for (const questionId of enAttente) {
+      clearTimeout(minuteursEnvoi.current[questionId]);
+      delete minuteursEnvoi.current[questionId];
+      await enregistrerSelection(questionId, dernieresSelections.current[questionId]);
+    }
   }
 
   async function enregistrerSelection(questionId: string, choix: Set<string>) {
