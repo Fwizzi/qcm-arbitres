@@ -9,9 +9,15 @@ interface LigneJournal {
   created_at: string;
   auteur: string;
 }
+interface ProfilLeger {
+  id: string;
+  full_name: string;
+}
 
 export default function Journal() {
   const [lignes, setLignes] = useState<LigneJournal[]>([]);
+  const [personnes, setPersonnes] = useState<ProfilLeger[]>([]);
+  const [filtre, setFiltre] = useState('tous');
   const [loading, setLoading] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -20,11 +26,17 @@ export default function Journal() {
       setLoading(true);
       setErreur(null);
 
-      const { data: entrees, error: err1 } = await supabase
+      let requete = supabase
         .from('activity_log')
         .select('id, action, created_at, user_id')
         .order('created_at', { ascending: false })
         .limit(100);
+
+      if (filtre !== 'tous') {
+        requete = requete.eq('user_id', filtre);
+      }
+
+      const { data: entrees, error: err1 } = await requete;
 
       if (err1) {
         setErreur('Impossible de charger le journal. Réessaie dans un instant.');
@@ -50,6 +62,14 @@ export default function Journal() {
       setLoading(false);
     }
     charger();
+  }, [filtre]);
+
+  useEffect(() => {
+    async function chargerPersonnes() {
+      const { data } = await supabase.from('profiles').select('id, full_name').order('full_name');
+      setPersonnes(data ?? []);
+    }
+    chargerPersonnes();
   }, []);
 
   function formatDate(d: string) {
@@ -65,6 +85,20 @@ export default function Journal() {
     <AppLayout>
       <AdminNav />
       <h1 className="text-lg font-semibold mb-4">Journal d'activité</h1>
+
+      <label className="block text-xs text-muted mb-1">Filtrer par personne</label>
+      <select
+        value={filtre}
+        onChange={(e) => setFiltre(e.target.value)}
+        className="w-full border border-border rounded px-3 py-2 mb-4 text-sm"
+      >
+        <option value="tous">Toutes les personnes</option>
+        {personnes.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.full_name}
+          </option>
+        ))}
+      </select>
 
       {loading && <p className="text-sm text-muted">Chargement…</p>}
       {erreur && <p className="text-sm text-card-red">{erreur}</p>}
