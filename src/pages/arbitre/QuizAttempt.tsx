@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import AppLayout from '../../components/AppLayout';
 import { supabase } from '../../lib/supabaseClient';
@@ -33,19 +33,20 @@ export default function QuizAttempt() {
   const [erreurSelection, setErreurSelection] = useState<string | null>(null);
   const [tempsRestant, setTempsRestant] = useState(0);
   const [soumission, setSoumission] = useState(false);
-
-  // Anti-rebond : si l'arbitre coche plusieurs cases très vite sur la
-  // même question, on n'envoie que le dernier état, une seule fois,
-  // après une courte pause — deux envois concurrents pour la même
-  // question pouvaient se marcher dessus en base (double insertion).
-  const minuteursEnvoi = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  const dernieresSelections = useRef<Record<string, Set<string>>>({});
+  const [navigationEnCours, setNavigationEnCours] = useState(false);
 
   const soumettre = useCallback(
     async (id: string) => {
       setSoumission(true);
       setErreur(null);
-      await viderEnvoisEnAttente();
+      const questionEnCours = questions[indexActuel];
+      if (questionEnCours) {
+        const ok = await sauvegarderQuestion(questionEnCours.id);
+        if (!ok) {
+          setSoumission(false);
+          return;
+        }
+      }
       const { error } = await avecRetriesTimeout(() =>
         supabase.rpc('submit_exam_attempt', { p_attempt_id: id })
       );
@@ -58,7 +59,7 @@ export default function QuizAttempt() {
       }
       navigate(`/arbitre/qcm/${quizId}/resultat/${id}`, { replace: true });
     },
-    [navigate, quizId, attemptId]
+    [navigate, quizId, attemptId, questions, indexActuel, selections]
   );
 
   useEffect(() => {
@@ -166,7 +167,6 @@ export default function QuizAttempt() {
   }, [questionActuelle]);
 
   function basculerOption(questionId: string, optionId: string, max: number) {
-    if (!attemptId) return;
     const actuel = new Set(selections[questionId] ?? []);
     if (actuel.has(optionId)) {
       actuel.delete(optionId);
@@ -175,47 +175,42 @@ export default function QuizAttempt() {
       actuel.add(optionId);
     }
     setSelections((prev) => ({ ...prev, [questionId]: actuel }));
-
-    dernieresSelections.current[questionId] = actuel;
-    if (minuteursEnvoi.current[questionId]) {
-      clearTimeout(minuteursEnvoi.current[questionId]);
-    }
-    minuteursEnvoi.current[questionId] = setTimeout(() => {
-      delete minuteursEnvoi.current[questionId];
-      enregistrerSelection(questionId, actuel);
-    }, 400);
   }
 
-  // Envoie immédiatement toute sélection encore en attente (anti-rebond
-  // pas encore déclenché) — appelé juste avant la soumission finale,
-  // pour être sûr que rien ne se perde.
-  async function viderEnvoisEnAttente() {
-    const enAttente = Object.keys(minuteursEnvoi.current);
-    for (const questionId of enAttente) {
-      clearTimeout(minuteursEnvoi.current[questionId]);
-      delete minuteursEnvoi.current[questionId];
-      await enregistrerSelection(questionId, dernieresSelections.current[questionId]);
-    }
-  }
-
-  async function enregistrerSelection(questionId: string, choix: Set<string>) {
-    if (!attemptId) return;
+  // Enregistre les réponses cochées pour UNE question donnée. Appelée
+  // uniquement en quittant la question (Précédent/Suivant) ou à la
+  // soumission finale — plus à chaque case cochée, pour limiter
+  // nettement le nombre de requêtes envoyées.
+  async function sauvegarderQuestion(questionId: string) {
+    if (!attemptId) return true;
     setErreurSelection(null);
+    const choix = selections[questionId] ?? new Set<string>();
+
     const { error: errDelete } = await avecRetriesTimeout(() =>
       supabase.from('selected_answers').delete().eq('attempt_id', attemptId).eq('question_id', questionId)
     );
     if (errDelete) {
-      setErreurSelection("Ta réponse n'a pas pu être enregistrée. Recoche ta réponse dans un instant.");
-      return;
+      setErreurSelection("Tes réponses n'ont pas pu être enregistrées. Réessaie dans un instant.");
+      return false;
     }
     if (choix.size > 0) {
       const { error: errInsert } = await supabase
         .from('selected_answers')
         .insert(Array.from(choix).map((optionId) => ({ attempt_id: attemptId, question_id: questionId, option_id: optionId })));
       if (errInsert) {
-        setErreurSelection("Ta réponse n'a pas pu être enregistrée. Recoche ta réponse dans un instant.");
+        setErreurSelection("Tes réponses n'ont pas pu être enregistrées. Réessaie dans un instant.");
+        return false;
       }
     }
+    return true;
+  }
+
+  async function allerA(nouvelIndex: number) {
+    if (!questionActuelle || navigationEnCours) return;
+    setNavigationEnCours(true);
+    const ok = await sauvegarderQuestion(questionActuelle.id);
+    setNavigationEnCours(false);
+    if (ok) setIndexActuel(nouvelIndex);
   }
 
   function formatTemps(s: number) {
@@ -321,8 +316,9 @@ export default function QuizAttempt() {
         {indexActuel > 0 && (
           <button
             type="button"
-            onClick={() => setIndexActuel((i) => i - 1)}
-            className="flex-1 border border-border rounded py-2 text-sm"
+            onClick={() => allerA(indexActuel - 1)}
+            disabled={navigationEnCours}
+            className="flex-1 border border-border rounded py-2 text-sm disabled:opacity-60"
           >
             Précédent
           </button>
@@ -330,8 +326,9 @@ export default function QuizAttempt() {
         {!dernierQuestion ? (
           <button
             type="button"
-            onClick={() => setIndexActuel((i) => i + 1)}
-            className="flex-1 bg-pitch text-white font-medium rounded py-2 text-sm"
+            onClick={() => allerA(indexActuel + 1)}
+            disabled={navigationEnCours}
+            className="flex-1 bg-pitch text-white font-medium rounded py-2 text-sm disabled:opacity-60"
           >
             Question suivante
           </button>
