@@ -69,7 +69,7 @@ export default function QuizQuestions() {
   const [erreurForm, setErreurForm] = useState<string | null>(null);
 
   const [envoisEnCours, setEnvoisEnCours] = useState<EnvoiEnCours[]>([]);
-  const [questionDepliee, setQuestionDepliee] = useState<string | null>(null);
+  const [questionsDepliees, setQuestionsDepliees] = useState<Set<string>>(new Set());
   const [mediaUrlsApercu, setMediaUrlsApercu] = useState<Record<string, string>>({});
   const [chargementMediaApercu, setChargementMediaApercu] = useState<string | null>(null);
 
@@ -377,7 +377,20 @@ export default function QuizQuestions() {
       )}
 
       {!loading && questions.length > 0 && (
-        <ul className="flex flex-col gap-2 mb-6">
+        <>
+          <button
+            type="button"
+            onClick={() =>
+              setQuestionsDepliees((prev) =>
+                prev.size === questions.length ? new Set() : new Set(questions.map((q) => q.id))
+              )
+            }
+            className="text-xs text-muted underline mb-2"
+          >
+            {questionsDepliees.size === questions.length ? 'Tout replier' : 'Tout déplier'}
+          </button>
+
+          <ul className="flex flex-col gap-2 mb-6">
           {questions.map((q, i) => (
             <li
               key={q.id}
@@ -419,13 +432,19 @@ export default function QuizQuestions() {
 
               <button
                 type="button"
-                onClick={() => setQuestionDepliee(questionDepliee === q.id ? null : q.id)}
+                onClick={() =>
+                  setQuestionsDepliees((prev) => {
+                    const suivant = new Set(prev);
+                    suivant.has(q.id) ? suivant.delete(q.id) : suivant.add(q.id);
+                    return suivant;
+                  })
+                }
                 className="text-xs text-muted underline mt-2"
               >
-                {questionDepliee === q.id ? 'Masquer les réponses' : 'Voir les réponses'}
+                {questionsDepliees.has(q.id) ? 'Masquer les réponses' : 'Voir les réponses'}
               </button>
 
-              {questionDepliee === q.id && (
+              {questionsDepliees.has(q.id) && (
                 <div className="mt-2 pt-2 border-t border-border">
                   {q.type !== 'text' && q.media_url && q.media_url !== '__deleted__' && (
                     <div className="mb-2">
@@ -473,6 +492,7 @@ export default function QuizQuestions() {
             </li>
           ))}
         </ul>
+        </>
       )}
 
       {statutQcm === 'published' ? (
