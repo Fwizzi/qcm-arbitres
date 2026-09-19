@@ -254,6 +254,10 @@ export default function QuizForm() {
         </p>
       )}
 
+      <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-3">
+        Informations générales
+      </label>
+
       <label className="block text-sm text-muted mb-1">Titre</label>
       <input
         type="text"
@@ -270,32 +274,11 @@ export default function QuizForm() {
         value={dureeMinutes}
         disabled={estPublie}
         onChange={(e) => setDureeMinutes(Number(e.target.value))}
-        className="w-28 border border-border rounded px-3 py-2 mb-4 disabled:bg-canvas disabled:text-muted"
+        className="w-28 border border-border rounded px-3 py-2 mb-2 disabled:bg-canvas disabled:text-muted"
       />
 
-      <label className="flex items-center gap-2 text-sm mb-4 py-2 border-t border-border">
-        <input type="checkbox" checked={afficherScore} disabled={estPublie} onChange={(e) => setAfficherScore(e.target.checked)} />
-        Afficher le score à l'arbitre
-      </label>
-
-      <label className="flex items-center gap-2 text-sm mb-4 py-2 border-t border-border">
-        <input
-          type="checkbox"
-          checked={afficherCorrection}
-          disabled={estPublie}
-          onChange={(e) => setAfficherCorrection(e.target.checked)}
-        />
-        Afficher la correction détaillée à l'arbitre à l'issue de la période
-      </label>
-
-      <label className="flex items-center gap-2 text-sm mb-4 py-2 border-y border-border">
-        <input
-          type="checkbox"
-          checked={afficherNombreAttendu}
-          disabled={estPublie}
-          onChange={(e) => setAfficherNombreAttendu(e.target.checked)}
-        />
-        Afficher à l'arbitre le nombre de réponses attendues (limite alors sa sélection à ce nombre)
+      <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-3 mt-6 pt-4 border-t border-border">
+        Période et diffusion
       </label>
 
       <label className="block text-sm text-muted mb-1">Période d'accessibilité (date et heure)</label>
@@ -324,11 +307,11 @@ export default function QuizForm() {
 
       <label className="block text-sm text-muted mb-2">Groupes destinataires</label>
       {groupes.length === 0 && (
-        <p className="text-xs text-muted mb-4">
+        <p className="text-xs text-muted mb-2">
           Aucun groupe créé pour l'instant (prochaine étape à construire).
         </p>
       )}
-      <div className="flex flex-col gap-1 mb-4">
+      <div className="flex flex-col gap-1 mb-2">
         {groupes.map((g) => (
           <label key={g.id} className="flex items-center gap-2 text-sm">
             <input
@@ -341,6 +324,35 @@ export default function QuizForm() {
           </label>
         ))}
       </div>
+
+      <label className="block text-xs font-semibold text-muted uppercase tracking-wide mb-1 mt-6 pt-4 border-t border-border">
+        Ce que voit l'arbitre
+      </label>
+
+      <label className="flex items-center gap-2 text-sm mb-1 py-2">
+        <input type="checkbox" checked={afficherScore} disabled={estPublie} onChange={(e) => setAfficherScore(e.target.checked)} />
+        Afficher le score à l'arbitre
+      </label>
+
+      <label className="flex items-center gap-2 text-sm mb-1 py-2 border-t border-border">
+        <input
+          type="checkbox"
+          checked={afficherCorrection}
+          disabled={estPublie}
+          onChange={(e) => setAfficherCorrection(e.target.checked)}
+        />
+        Afficher la correction détaillée à l'arbitre à l'issue de la période
+      </label>
+
+      <label className="flex items-center gap-2 text-sm mb-4 py-2 border-t border-border">
+        <input
+          type="checkbox"
+          checked={afficherNombreAttendu}
+          disabled={estPublie}
+          onChange={(e) => setAfficherNombreAttendu(e.target.checked)}
+        />
+        Afficher à l'arbitre le nombre de réponses attendues (limite alors sa sélection à ce nombre)
+      </label>
 
       <button
         type="button"
