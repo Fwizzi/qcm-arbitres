@@ -22,6 +22,7 @@ const LABELS: Record<AppRole, string> = {
 
 export default function Comptes() {
   const [personnes, setPersonnes] = useState<PersonneAvecRoles[]>([]);
+  const [recherche, setRecherche] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [ouvert, setOuvert] = useState<string | null>(null);
@@ -200,6 +201,12 @@ export default function Comptes() {
       .toUpperCase();
   }
 
+  const personnesFiltrees = personnes.filter((p) => {
+    const texte = recherche.trim().toLowerCase();
+    if (!texte) return true;
+    return p.full_name.toLowerCase().includes(texte) || p.email.toLowerCase().includes(texte);
+  });
+
   return (
     <AppLayout>
       <AdminNav />
@@ -267,8 +274,21 @@ export default function Comptes() {
       {loading && <p className="text-sm text-muted">Chargement…</p>}
       {error && <p className="text-sm text-card-red">{error}</p>}
 
+      {!loading && !error && personnes.length > 0 && (
+        <input
+          type="text"
+          value={recherche}
+          onChange={(e) => setRecherche(e.target.value)}
+          placeholder="Rechercher par nom ou e-mail…"
+          className="w-full border border-border rounded px-3 py-2 mb-3 text-sm"
+        />
+      )}
+      {personnes.length > 0 && personnesFiltrees.length === 0 && (
+        <p className="text-sm text-muted">Aucun compte ne correspond à cette recherche.</p>
+      )}
+
       <ul>
-        {personnes.map((p) => (
+        {personnesFiltrees.map((p) => (
           <li key={p.id} className="border-b border-border py-3">
             <button
               type="button"
