@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import AppLayout from '../../components/AppLayout';
 import AdminNav from '../../components/AdminNav';
 import { supabase } from '../../lib/supabaseClient';
@@ -27,6 +28,7 @@ export default function AdminDashboard() {
   const [nbActifs, setNbActifs] = useState(0);
   const [nbNonRepondants, setNbNonRepondants] = useState(0);
   const [quizzes, setQuizzes] = useState<QuizVue[]>([]);
+  const [recherche, setRecherche] = useState('');
 
   useEffect(() => {
     async function charger() {
@@ -97,6 +99,12 @@ export default function AdminDashboard() {
     charger();
   }, []);
 
+  const quizzesFiltres = quizzes.filter((q) => {
+    const texte = recherche.trim().toLowerCase();
+    if (!texte) return true;
+    return q.title.toLowerCase().includes(texte) || q.formateur_nom.toLowerCase().includes(texte);
+  });
+
   if (loading) {
     return (
       <AppLayout>
@@ -132,21 +140,38 @@ export default function AdminDashboard() {
       </div>
 
       <p className="text-sm font-medium mb-2">Tous les QCM de la plateforme</p>
+
+      <input
+        type="text"
+        value={recherche}
+        onChange={(e) => setRecherche(e.target.value)}
+        placeholder="Rechercher par titre ou par formateur…"
+        className="w-full border border-border rounded px-3 py-2 mb-3 text-sm"
+      />
+
       {quizzes.length === 0 && <p className="text-sm text-muted">Aucun QCM pour le moment.</p>}
+      {quizzes.length > 0 && quizzesFiltres.length === 0 && (
+        <p className="text-sm text-muted">Aucun QCM ne correspond à cette recherche.</p>
+      )}
       <ul className="flex flex-col gap-2">
-        {quizzes.map((q) => {
+        {quizzesFiltres.map((q) => {
           const statut = STATUT[q.computed_status];
           return (
-            <li key={q.id} className="bg-surface border border-border rounded p-3">
-              <div className="flex items-center justify-between mb-1 gap-2">
-                <span className="text-sm font-medium">{q.title}</span>
-                <span className={`text-xs rounded px-2 py-0.5 shrink-0 ${statut.className}`}>
-                  {statut.label}
-                </span>
-              </div>
-              <p className="text-xs text-muted">
-                {q.formateur_nom} · {q.repondus}/{q.cibles} répondus
-              </p>
+            <li key={q.id}>
+              <Link
+                to={`/admin/qcm/${q.id}/resultats`}
+                className="block bg-surface border border-border rounded p-3"
+              >
+                <div className="flex items-center justify-between mb-1 gap-2">
+                  <span className="text-sm font-medium">{q.title}</span>
+                  <span className={`text-xs rounded px-2 py-0.5 shrink-0 ${statut.className}`}>
+                    {statut.label}
+                  </span>
+                </div>
+                <p className="text-xs text-muted">
+                  {q.formateur_nom} · {q.repondus}/{q.cibles} répondus
+                </p>
+              </Link>
             </li>
           );
         })}
