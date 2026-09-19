@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import AppLayout from '../../components/AppLayout';
 import QuizTabs from '../../components/QuizTabs';
 import { supabase } from '../../lib/supabaseClient';
@@ -17,6 +17,11 @@ interface LigneResultat {
 export default function QuizResultats() {
   const { id: quizId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  // Cet écran est accessible aussi bien par le formateur propriétaire que
+  // par l'administrateur (mêmes données, même export) : on adapte les
+  // liens internes et le retour selon le chemin par lequel on y est venu.
+  const basePath = location.pathname.startsWith('/admin') ? '/admin' : '/formateur';
 
   const [titre, setTitre] = useState('');
   const [lignes, setLignes] = useState<LigneResultat[]>([]);
@@ -252,7 +257,7 @@ export default function QuizResultats() {
     setSuppression(false);
     if (!error) {
       await logActivity(`a supprimé le QCM « ${titre} »`, 'quiz', quizId);
-      navigate('/formateur');
+      navigate(basePath);
     } else {
       setErreur('La suppression a échoué. Réessaie dans un instant.');
     }
@@ -268,7 +273,13 @@ export default function QuizResultats() {
 
   return (
     <AppLayout>
-      {quizId && <QuizTabs quizId={quizId} />}
+      {basePath === '/formateur' ? (
+        quizId && <QuizTabs quizId={quizId} />
+      ) : (
+        <Link to="/admin" className="text-sm text-muted underline mb-3 inline-block">
+          ← Vue d'ensemble
+        </Link>
+      )}
       <h1 className="text-lg font-semibold mb-1">{titre}</h1>
       <p className="text-sm text-muted mb-4">
         {repondus.length}/{lignes.length} répondus
@@ -321,7 +332,7 @@ export default function QuizResultats() {
           l.statut === 'soumis' && l.attemptId ? (
             <li key={l.id} className="border-b border-border">
               <Link
-                to={`/formateur/qcm/${quizId}/resultats/${l.attemptId}`}
+                to={`${basePath}/qcm/${quizId}/resultats/${l.attemptId}`}
                 className="flex items-center justify-between py-2.5"
               >
                 <span className="text-sm">{l.full_name}</span>
