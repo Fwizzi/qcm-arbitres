@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import AppLayout from '../../components/AppLayout';
 import { supabase } from '../../lib/supabaseClient';
 
@@ -53,6 +53,8 @@ function statutOption(o: OptionAffichee): { classe: string; label: string | null
 
 export default function AttemptDetail() {
   const { id: quizId, attemptId } = useParams();
+  const location = useLocation();
+  const basePath = location.pathname.startsWith('/admin') ? '/admin' : '/formateur';
   const [nomArbitre, setNomArbitre] = useState('');
   const [score, setScore] = useState<number | null>(null);
   const [questions, setQuestions] = useState<QuestionGroupee[]>([]);
@@ -141,7 +143,7 @@ export default function AttemptDetail() {
 
   return (
     <AppLayout>
-      <Link to={`/formateur/qcm/${quizId}/resultats`} className="text-sm text-muted underline mb-3 inline-block">
+      <Link to={`${basePath}/qcm/${quizId}/resultats`} className="text-sm text-muted underline mb-3 inline-block">
         ← Résultats
       </Link>
       <h1 className="text-lg font-semibold mb-1">{nomArbitre}</h1>
