@@ -11,6 +11,7 @@ interface QuizRow {
   computed_status: 'draft' | 'a_venir' | 'actif' | 'expire';
   period_start: string;
   period_end: string;
+  created_at: string;
 }
 
 const STATUT: Record<QuizRow['computed_status'], { label: string; className: string }> = {
@@ -20,6 +21,15 @@ const STATUT: Record<QuizRow['computed_status'], { label: string; className: str
   expire: { label: 'Expiré', className: 'bg-canvas text-muted' },
 };
 
+// Ordre d'affichage : ce qui se passe maintenant en premier, ce qui est
+// terminé en dernier — plutôt que l'ordre de création.
+const PRIORITE_STATUT: Record<QuizRow['computed_status'], number> = {
+  actif: 0,
+  draft: 1,
+  a_venir: 2,
+  expire: 3,
+};
+
 function formatDate(d: string) {
   return new Date(d).toLocaleString('fr-FR', {
     day: '2-digit',
@@ -27,6 +37,31 @@ function formatDate(d: string) {
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+  });
+}
+
+function trierQuizzes(liste: QuizRow[]): QuizRow[] {
+  return [...liste].sort((a, b) => {
+    const diffPriorite = PRIORITE_STATUT[a.computed_status] - PRIORITE_STATUT[b.computed_status];
+    if (diffPriorite !== 0) return diffPriorite;
+
+    // À l'intérieur d'un même statut : le plus pertinent en premier.
+    switch (a.computed_status) {
+      case 'actif':
+        // Celui qui se termine le plus tôt est le plus urgent à surveiller.
+        return new Date(a.period_end).getTime() - new Date(b.period_end).getTime();
+      case 'a_venir':
+        // Celui qui démarre le plus tôt en premier.
+        return new Date(a.period_start).getTime() - new Date(b.period_start).getTime();
+      case 'draft':
+        // Le brouillon le plus récemment créé en premier.
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      case 'expire':
+        // Le plus récemment expiré en premier (encore pertinent).
+        return new Date(b.period_end).getTime() - new Date(a.period_end).getTime();
+      default:
+        return 0;
+    }
   });
 }
 
@@ -46,14 +81,13 @@ export default function FormateurDashboard() {
 
       const { data, error } = await supabase
         .from('quizzes_with_computed_status')
-        .select('id, title, computed_status, period_start, period_end')
-        .eq('formateur_id', session.user.id)
-        .order('created_at', { ascending: false });
+        .select('id, title, computed_status, period_start, period_end, created_at')
+        .eq('formateur_id', session.user.id);
 
       if (error) {
         setError('Impossible de charger tes QCM. Réessaie dans un instant.');
       } else {
-        setQuizzes((data ?? []) as QuizRow[]);
+        setQuizzes(trierQuizzes((data ?? []) as QuizRow[]));
       }
       setLoading(false);
     }
