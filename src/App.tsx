@@ -74,6 +74,22 @@ export default function App() {
             }
           />
           <Route
+            path="/admin/qcm/:id/resultats"
+            element={
+              <ProtectedRoute role="admin">
+                <QuizResultats />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/qcm/:id/resultats/:attemptId"
+            element={
+              <ProtectedRoute role="admin">
+                <AttemptDetail />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/formateur"
             element={
               <ProtectedRoute role="formateur">
