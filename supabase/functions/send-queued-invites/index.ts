@@ -71,11 +71,18 @@ Deno.serve(async (req: Request) => {
     );
 
     if (inviteErr || !created?.user) {
+      const message = inviteErr?.message ?? 'Échec inconnu.';
+      // Un dépassement de quota est temporaire : on remet la ligne en
+      // 'en_attente' pour que le prochain passage (30 min plus tard) la
+      // reprenne automatiquement, plutôt que de l'abandonner sur 'echec'.
+      const estQuotaDepasse = message.toLowerCase().includes('rate limit');
       await supabaseAdmin
         .from('invite_queue')
-        .update({ status: 'echec', erreur: inviteErr?.message ?? 'Échec inconnu.' })
+        .update(
+          estQuotaDepasse ? { status: 'en_attente', erreur: null } : { status: 'echec', erreur: message }
+        )
         .eq('id', invite.id);
-      return json({ sent: 0, error: inviteErr?.message ?? 'Échec inconnu.' }, 200);
+      return json({ sent: 0, error: message, reessai: estQuotaDepasse }, 200);
     }
 
     const { error: rolesErr } = await supabaseAdmin
