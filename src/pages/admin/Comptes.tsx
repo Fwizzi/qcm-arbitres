@@ -70,6 +70,10 @@ export default function Comptes() {
   const [avertissementSuppression, setAvertissementSuppression] = useState<string | null>(null);
   const [suppression, setSuppression] = useState(false);
   const [erreurSuppression, setErreurSuppression] = useState<string | null>(null);
+  const [genererLienEnCours, setGenererLienEnCours] = useState(false);
+  const [lienActivationPanneau, setLienActivationPanneau] = useState<string | null>(null);
+  const [erreurLienPanneau, setErreurLienPanneau] = useState<string | null>(null);
+  const [lienPanneauCopie, setLienPanneauCopie] = useState(false);
 
   // --- Création d'un compte (un par un) ---
   const [formulaireOuvert, setFormulaireOuvert] = useState(false);
@@ -159,6 +163,9 @@ export default function Comptes() {
     setConfirmationSuppression(null);
     setAvertissementSuppression(null);
     setErreurSuppression(null);
+    setLienActivationPanneau(null);
+    setErreurLienPanneau(null);
+    setLienPanneauCopie(false);
   }
 
   async function enregistrerNom(personneId: string) {
@@ -191,6 +198,36 @@ export default function Comptes() {
     setNouveauMotDePasse('');
     setSuccesMdp(true);
     await logActivity(`a réinitialisé le mot de passe de ${nomPersonne}`, 'profile', personneId);
+  }
+
+  async function genererLienActivationPanneau(p: PersonneAvecRoles) {
+    setErreurLienPanneau(null);
+    setLienActivationPanneau(null);
+    setLienPanneauCopie(false);
+
+    if (p.roles.length === 0) {
+      setErreurLienPanneau('Attribue au moins un rôle avant de générer un lien.');
+      return;
+    }
+
+    setGenererLienEnCours(true);
+    const { data, error } = await supabase.functions.invoke('create-user', {
+      body: { action: 'generate-invite-link', email: p.email, full_name: p.full_name, roles: p.roles },
+    });
+    setGenererLienEnCours(false);
+
+    if (error || data?.error) {
+      setErreurLienPanneau(await extraireErreurFonction(error, data));
+      return;
+    }
+    setLienActivationPanneau(data.link);
+    await logActivity(`a généré un nouveau lien d'activation pour ${p.full_name}`, 'profile', p.id);
+  }
+
+  async function copierLienPanneau() {
+    if (!lienActivationPanneau) return;
+    await navigator.clipboard.writeText(lienActivationPanneau);
+    setLienPanneauCopie(true);
   }
 
   async function demanderConfirmationSuppression(p: PersonneAvecRoles) {
@@ -760,6 +797,43 @@ export default function Comptes() {
                   <p className="text-xs text-muted">
                     8 caractères minimum. Transmets-le à la personne concernée.
                   </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-muted mb-1">Lien d'activation</label>
+                  <p className="text-xs text-muted mb-1.5">
+                    Si la personne n'a pas reçu ou a perdu son lien pour choisir elle-même son mot de
+                    passe, génère un nouveau lien à lui transmettre.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => genererLienActivationPanneau(p)}
+                    disabled={genererLienEnCours}
+                    className="text-xs border border-border rounded px-3 py-1.5 disabled:opacity-50"
+                  >
+                    {genererLienEnCours ? 'Génération…' : "Générer un nouveau lien d'activation"}
+                  </button>
+                  {erreurLienPanneau && (
+                    <p className="text-xs text-card-red mt-1.5">{erreurLienPanneau}</p>
+                  )}
+                  {lienActivationPanneau && (
+                    <div className="flex gap-2 mt-1.5">
+                      <input
+                        type="text"
+                        readOnly
+                        value={lienActivationPanneau}
+                        className="flex-1 text-xs border border-border rounded px-2 py-1.5 bg-canvas"
+                        onFocus={(ev) => ev.target.select()}
+                      />
+                      <button
+                        type="button"
+                        onClick={copierLienPanneau}
+                        className="text-xs border border-border rounded px-3 shrink-0"
+                      >
+                        {lienPanneauCopie ? 'Copié !' : 'Copier'}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-3 border-t border-border">
