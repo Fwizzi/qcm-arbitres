@@ -1,6 +1,9 @@
 // Fonction Supabase Edge Function : supprime de Cloudflare R2 les vidéos
 // et images des QCM expirés depuis plus longtemps que la durée de
 // conservation fixée par l'administrateur (réglage "video_retention_days").
+// Un fichier peut être partagé avec un QCM dupliqué encore actif : dans
+// ce cas, le fichier R2 est conservé (l'autre QCM en a besoin), seule la
+// référence de CETTE question est marquée comme expirée.
 // Appelée automatiquement chaque jour par un GitHub Actions programmé
 // (voir .github/workflows/cleanup-videos.yml), jamais depuis le navigateur.
 // Protégée par un secret partagé, pas par une session utilisateur : il
@@ -74,22 +77,34 @@ Deno.serve(async (req: Request) => {
 
     let supprimees = 0;
     for (const question of questionsAvecMedia) {
-      try {
-        await s3.send(
-          new DeleteObjectCommand({
-            Bucket: Deno.env.get('R2_BUCKET_NAME')!,
-            Key: question.media_url!,
-          })
-        );
-        await supabaseAdmin
-          .from('questions')
-          .update({ media_url: MARQUEUR_SUPPRIME })
-          .eq('id', question.id);
-        supprimees++;
-      } catch (_e) {
-        // On continue avec les suivantes même si une suppression échoue ;
-        // elle sera retentée automatiquement le lendemain.
+      // Un fichier partagé avec une autre question (ex. QCM dupliqué)
+      // encore valide n'est pas supprimé de R2 : on marque seulement
+      // CETTE question comme expirée, sans toucher au fichier lui-même.
+      const { count: encorePartage } = await supabaseAdmin
+        .from('questions')
+        .select('id', { count: 'exact', head: true })
+        .eq('media_url', question.media_url)
+        .neq('id', question.id);
+
+      if (!encorePartage || encorePartage === 0) {
+        try {
+          await s3.send(
+            new DeleteObjectCommand({
+              Bucket: Deno.env.get('R2_BUCKET_NAME')!,
+              Key: question.media_url!,
+            })
+          );
+        } catch (_e) {
+          // Le fichier sera retenté le lendemain ; on marque quand même
+          // la question comme expirée pour ne pas la reproposer sans fin.
+        }
       }
+
+      await supabaseAdmin
+        .from('questions')
+        .update({ media_url: MARQUEUR_SUPPRIME })
+        .eq('id', question.id);
+      supprimees++;
     }
 
     return json({ supprimees }, 200);
