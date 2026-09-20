@@ -335,11 +335,9 @@ export default function Comptes() {
       return;
     }
     setConfirmationEmail(
-      data.envoyeImmediatement
-        ? 'Invitation envoyée immédiatement par e-mail.'
-        : data.echecImmediat
-          ? `L'envoi immédiat a échoué (${data.echecImmediat}). Vérifie dans la liste ci-dessous si le compte a été créé ; utilise alors le bouton « Générer un nouveau lien d'activation » sur sa fiche pour lui transmettre un lien.`
-          : `Invitation mise en file d'attente. Envoi automatique par e-mail prévu vers le ${formatDateHeure(data.dernierEnvoiEstime)}.`
+      data.dureeEstimeeSecondes <= 4
+        ? "Invitation envoyée par e-mail à l'instant."
+        : `Invitation en cours d'envoi par e-mail (avant ${formatDateHeure(new Date(Date.now() + data.dureeEstimeeSecondes * 1000).toISOString())}).`
     );
     await logActivity(`a mis en file d'attente l'invitation de ${nomComplet}`, 'profile');
     await chargerFileAttente();
@@ -443,12 +441,10 @@ export default function Comptes() {
     );
 
     setMessageImport(
-      `${data.queued} invitation(s) mise(s) en file d'attente` +
-        (data.envoyeImmediatement
-          ? ' (la première a été envoyée immédiatement).'
-          : data.echecImmediat
-            ? " (l'envoi immédiat de la première a échoué, voir son statut « Échec » ci-dessous)."
-            : '.') +
+      `${data.queued} invitation(s) en cours d'envoi par e-mail` +
+        (data.dureeEstimeeSecondes > 4
+          ? ` (avant ${formatDateHeure(new Date(Date.now() + data.dureeEstimeeSecondes * 1000).toISOString())}).`
+          : '.') +
         (erreursServeur.length > 0 ? ` ${erreursServeur.length} ligne(s) ignorée(s), voir détail ci-dessous.` : '')
     );
     setErreursImport(erreursServeur);
