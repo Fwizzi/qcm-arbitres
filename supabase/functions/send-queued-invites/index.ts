@@ -1,8 +1,13 @@
-// Fonction Supabase Edge Function déclenchée automatiquement toutes les
-// 30 minutes (voir README de ce dossier pour la mise en place du
-// déclencheur planifié). Envoie UNE SEULE invitation en attente à
-// chaque exécution : avec un envoi toutes les 30 minutes, cela reste
-// sous la limite gratuite de Supabase (2 e-mails par heure).
+// Fonction Supabase Edge Function déclenchée automatiquement par un cron
+// job (Supabase > Database > Cron Jobs). Envoie UNE SEULE invitation en
+// attente à chaque exécution : le débit total dépend donc entièrement de
+// la fréquence de ce déclencheur, pas d'un délai codé ici.
+//
+// Fréquence actuelle : toutes les 2 minutes (`*/2 * * * *`), calée sur la
+// limite de 30 e-mails/heure que Supabase Auth autorise une fois le SMTP
+// personnalisé (Gmail) configuré — voir Authentication > Rate Limits.
+// Si cette limite est un jour modifiée, ajuster la fréquence du cron en
+// conséquence (ex. limite doublée à 60/h → toutes les 1 minute).
 //
 // Protégée par un secret (pas par une session utilisateur, puisque
 // personne n'est connecté quand le déclencheur planifié s'exécute) :
