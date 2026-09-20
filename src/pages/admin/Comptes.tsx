@@ -81,6 +81,7 @@ export default function Comptes() {
   const [creation, setCreation] = useState(false);
   const [confirmationEmail, setConfirmationEmail] = useState<string | null>(null);
   const [lienGenere, setLienGenere] = useState<string | null>(null);
+  const [lienEstRenvoi, setLienEstRenvoi] = useState(false);
   const [lienCopie, setLienCopie] = useState(false);
 
   // --- Import Excel (plusieurs comptes d'un coup) ---
@@ -239,6 +240,7 @@ export default function Comptes() {
     setMethodeCreation('email');
     setConfirmationEmail(null);
     setLienGenere(null);
+    setLienEstRenvoi(false);
     setLienCopie(false);
   }
 
@@ -266,7 +268,14 @@ export default function Comptes() {
         return;
       }
       setLienGenere(data.link);
-      await logActivity(`a créé un lien d'activation pour ${nomComplet}`, 'profile', data?.id);
+      setLienEstRenvoi(Boolean(data.renvoi));
+      await logActivity(
+        data.renvoi
+          ? `a renvoyé un lien d'activation à ${nomComplet}`
+          : `a créé un lien d'activation pour ${nomComplet}`,
+        'profile',
+        data?.id
+      );
       await charger();
       return;
     }
@@ -519,7 +528,9 @@ export default function Comptes() {
           {lienGenere && (
             <div className="mb-3">
               <p className="text-sm text-pitch-dark bg-pitch-light rounded-t px-3 py-2">
-                Compte créé. Transmets ce lien à la personne concernée :
+                {lienEstRenvoi
+                  ? 'Un compte existait déjà pour cet e-mail (invitation précédente) : voici un nouveau lien à transmettre.'
+                  : 'Compte créé. Transmets ce lien à la personne concernée :'}
               </p>
               <div className="flex gap-2 border border-t-0 border-border rounded-b p-2">
                 <input
