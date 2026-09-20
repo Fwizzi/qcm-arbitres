@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './hooks/useAuth';
 import ProtectedRoute from './components/ProtectedRoute';
 import RequireAuth from './components/RequireAuth';
 import Login from './pages/Login';
+import ActiverCompte from './pages/ActiverCompte';
 import MonProfil from './pages/MonProfil';
 import AdminDashboard from './pages/admin/Dashboard';
 import Comptes from './pages/admin/Comptes';
@@ -33,6 +34,7 @@ export default function App() {
       <BrowserRouter basename="/qcm-arbitres">
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/activer-mon-compte" element={<ActiverCompte />} />
           <Route
             path="/mon-profil"
             element={
