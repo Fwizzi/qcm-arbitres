@@ -725,14 +725,18 @@ export default function Comptes() {
                           {f.email} · {f.roles.map((r) => LABELS[r]).join(', ')}
                         </p>
                         {f.erreur && <p className="text-xs text-card-red mb-1">{f.erreur}</p>}
-                        {f.status === 'en_attente' && (
+                        {(f.status === 'en_attente' || f.status === 'envoye' || f.status === 'echec') && (
                           <button
                             type="button"
                             onClick={() => annulerInvitation(f.id)}
                             disabled={annulationId === f.id}
                             className="text-xs text-card-red underline disabled:opacity-60"
                           >
-                            {annulationId === f.id ? 'Annulation…' : 'Annuler'}
+                            {annulationId === f.id
+                              ? 'Suppression…'
+                              : f.status === 'en_attente'
+                                ? 'Annuler'
+                                : 'Supprimer'}
                           </button>
                         )}
                       </li>
