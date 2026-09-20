@@ -1,2 +1,3 @@
 Modifications
-ajout de nouveaux utilisateurs (paramétrer leur mot de passe d'eux même et sécurisé)
+
+lors de l'ajout d'un compte l'envoi du premier mail doit être immédiat et non patienter 30 minutes avant l'envoi
