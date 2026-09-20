@@ -42,7 +42,15 @@ export default function ActiverCompte() {
       );
       return;
     }
-    navigate('/', { replace: true });
+
+    // On déconnecte volontairement la session temporaire ouverte par le
+    // lien reçu par e-mail : sans ça, ce même lien resterait utilisable
+    // tant que le navigateur reste connecté (rouvrir le lien rouvre la
+    // session déjà active, sans jamais revérifier son jeton). La personne
+    // se reconnecte ensuite normalement avec son nouveau mot de passe —
+    // ça confirme au passage qu'il fonctionne bien.
+    await supabase.auth.signOut();
+    navigate('/login', { replace: true, state: { motDePasseDefini: true } });
   }
 
   if (loading) {

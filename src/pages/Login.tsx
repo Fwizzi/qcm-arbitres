@@ -1,14 +1,16 @@
 import { useState, type FormEvent, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
 export default function Login() {
   const { signIn, session, loading, roles } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [motDePasseDefini, setMotDePasseDefini] = useState(false);
 
   // Une fois connecté ET les rôles chargés, on part automatiquement
   // vers le bon espace — sans dépendre d'un clic ou d'un délai fixe.
@@ -17,6 +19,18 @@ export default function Login() {
       navigate(`/${roles[0]}`, { replace: true });
     }
   }, [loading, session, roles, navigate]);
+
+  // Message affiché juste après une activation de compte ou une
+  // réinitialisation de mot de passe (voir ActiverCompte.tsx), qui
+  // redirige ici volontairement plutôt que de garder la personne connectée.
+  useEffect(() => {
+    const etat = location.state as { motDePasseDefini?: boolean } | null;
+    if (etat?.motDePasseDefini) {
+      setMotDePasseDefini(true);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.key]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -32,6 +46,12 @@ export default function Login() {
       <div className="w-full max-w-sm">
         <h1 className="text-xl font-semibold mb-1">QCM Arbitres</h1>
         <p className="text-sm text-muted mb-6">Connecte-toi avec le compte créé par ton administrateur.</p>
+
+        {motDePasseDefini && (
+          <p className="text-sm text-pitch-dark bg-pitch-light rounded px-3 py-2 mb-4">
+            Mot de passe défini avec succès. Connecte-toi pour continuer.
+          </p>
+        )}
 
         <form onSubmit={handleSubmit} className="bg-surface border border-border rounded p-5">
           <label htmlFor="email" className="block text-sm text-muted mb-1">
