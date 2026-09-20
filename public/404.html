@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Redirection…</title>
+    <script>
+      // GitHub Pages ne sait servir directement que la racine du site
+      // (index.html) : toute adresse plus précise (ex.
+      // /qcm-arbitres/activer-mon-compte), atteinte via un lien reçu par
+      // e-mail ou en rechargeant la page, renvoie cette page 404 au lieu de
+      // l'application. On encode ici l'adresse demandée dans l'adresse de
+      // la page d'accueil, qui la décode et restaure la bonne adresse
+      // avant que l'application ne démarre (voir index.html).
+      var chemin = location.pathname + location.search + location.hash;
+      location.replace('/qcm-arbitres/?redirect=' + encodeURIComponent(chemin));
+    </script>
+  </head>
+  <body></body>
+</html>
