@@ -2,11 +2,13 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../hooks/useAuth';
+import { estLienDeReinitialisation } from '../lib/lienAuth';
 
-// Page atteinte via le lien d'activation (envoyé par e-mail, ou transmis
-// manuellement par l'administrateur). Le clic sur ce lien établit déjà
-// une session Supabase temporaire ; cette page se contente de demander
-// à la personne de choisir son mot de passe pour la finaliser.
+// Page atteinte via un lien Supabase (activation d'un nouveau compte, ou
+// réinitialisation d'un mot de passe oublié). Le clic sur ce lien établit
+// déjà une session Supabase temporaire ; cette page se contente de
+// demander à la personne de choisir son mot de passe pour la finaliser.
+// Le texte s'adapte selon le type de lien (estLienDeReinitialisation).
 export default function ActiverCompte() {
   const { session, loading, profile } = useAuth();
   const navigate = useNavigate();
@@ -34,7 +36,9 @@ export default function ActiverCompte() {
 
     if (error) {
       setErreur(
-        "L'activation a échoué. Le lien a peut-être expiré — demande à ton administrateur de t'en envoyer un nouveau."
+        estLienDeReinitialisation
+          ? 'La mise à jour a échoué. Le lien a peut-être expiré — redemande un lien depuis la page de connexion.'
+          : "L'activation a échoué. Le lien a peut-être expiré — demande à ton administrateur de t'en envoyer un nouveau."
       );
       return;
     }
@@ -51,7 +55,9 @@ export default function ActiverCompte() {
         <div className="w-full max-w-sm text-center">
           <h1 className="text-xl font-semibold mb-2">Lien invalide ou expiré</h1>
           <p className="text-sm text-muted">
-            Ce lien d'activation n'est plus valable. Demande à ton administrateur de t'en envoyer un nouveau.
+            {estLienDeReinitialisation
+              ? "Ce lien n'est plus valable. Redemande un lien depuis la page de connexion."
+              : "Ce lien d'activation n'est plus valable. Demande à ton administrateur de t'en envoyer un nouveau."}
           </p>
         </div>
       </div>
@@ -62,10 +68,14 @@ export default function ActiverCompte() {
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <h1 className="text-xl font-semibold mb-1">
-          Bienvenue{profile?.full_name ? `, ${profile.full_name}` : ''}
+          {estLienDeReinitialisation
+            ? 'Nouveau mot de passe'
+            : `Bienvenue${profile?.full_name ? `, ${profile.full_name}` : ''}`}
         </h1>
         <p className="text-sm text-muted mb-6">
-          Choisis ton mot de passe pour activer ton compte QCM Arbitres.
+          {estLienDeReinitialisation
+            ? 'Choisis ton nouveau mot de passe.'
+            : 'Choisis ton mot de passe pour activer ton compte QCM Arbitres.'}
         </p>
 
         <form onSubmit={handleSubmit} className="bg-surface border border-border rounded p-5">
@@ -101,7 +111,13 @@ export default function ActiverCompte() {
             disabled={enregistrement}
             className="w-full bg-pitch text-white font-medium rounded py-2 disabled:opacity-60"
           >
-            {enregistrement ? 'Activation…' : 'Activer mon compte'}
+            {enregistrement
+              ? estLienDeReinitialisation
+                ? 'Mise à jour…'
+                : 'Activation…'
+              : estLienDeReinitialisation
+                ? 'Mettre à jour le mot de passe'
+                : 'Activer mon compte'}
           </button>
         </form>
       </div>

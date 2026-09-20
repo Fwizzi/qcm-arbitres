@@ -1,5 +1,5 @@
 import { useState, type FormEvent, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
 export default function Login() {
@@ -74,6 +74,10 @@ export default function Login() {
             {submitting ? 'Connexion…' : 'Se connecter'}
           </button>
         </form>
+
+        <Link to="/mot-de-passe-oublie" className="block text-center text-sm text-muted underline mt-4">
+          Mot de passe oublié ?
+        </Link>
       </div>
     </div>
   );
