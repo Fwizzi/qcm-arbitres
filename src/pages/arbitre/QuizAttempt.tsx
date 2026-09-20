@@ -34,6 +34,7 @@ export default function QuizAttempt() {
   const [tempsRestant, setTempsRestant] = useState(0);
   const [soumission, setSoumission] = useState(false);
   const [navigationEnCours, setNavigationEnCours] = useState(false);
+  const [confirmationEnvoi, setConfirmationEnvoi] = useState(false);
 
   const soumettre = useCallback(
     async (id: string) => {
@@ -255,21 +256,47 @@ export default function QuizAttempt() {
 
   const choixActuels = selections[questionActuelle.id] ?? new Set<string>();
   const dernierQuestion = indexActuel === questions.length - 1;
+  const tempsCritique = tempsRestant > 0 && tempsRestant <= 120;
+  const questionsSansReponse = questions.filter((q) => (selections[q.id]?.size ?? 0) === 0);
 
   return (
     <AppLayout>
       <p className="text-xs text-muted mb-2">{titre}</p>
-      <div className="flex items-center justify-between mb-1 text-xs text-muted">
-        <span>
+      <div className="flex items-center justify-between mb-1 text-xs">
+        <span className="text-muted">
           Question {indexActuel + 1} / {questions.length}
         </span>
-        <span>{formatTemps(tempsRestant)} restantes</span>
+        <span className={tempsCritique ? 'text-card-red font-semibold' : 'text-muted'}>
+          {formatTemps(tempsRestant)} restantes
+        </span>
       </div>
-      <div className="h-1 bg-canvas rounded overflow-hidden mb-4">
+      <div className="h-1 bg-canvas rounded overflow-hidden mb-3">
         <div
-          className="h-full bg-pitch"
+          className={`h-full ${tempsCritique ? 'bg-card-red' : 'bg-pitch'}`}
           style={{ width: `${((indexActuel + 1) / questions.length) * 100}%` }}
         />
+      </div>
+
+      <div className="flex flex-wrap gap-1.5 mb-4">
+        {questions.map((q, i) => {
+          const repondue = (selections[q.id]?.size ?? 0) > 0;
+          const estActuelle = i === indexActuel;
+          let classe = 'border-border text-muted';
+          if (estActuelle) classe = 'bg-pitch text-white border-pitch';
+          else if (repondue) classe = 'bg-pitch-light text-pitch-dark border-pitch';
+          return (
+            <button
+              key={q.id}
+              type="button"
+              onClick={() => allerA(i)}
+              disabled={navigationEnCours || estActuelle}
+              className={`w-7 h-7 shrink-0 rounded-full border text-xs font-medium disabled:cursor-default ${classe}`}
+              title={`Question ${i + 1}${repondue ? ' — répondue' : ' — sans réponse'}`}
+            >
+              {i + 1}
+            </button>
+          );
+        })}
       </div>
 
       {questionActuelle.type !== 'text' && (
@@ -335,7 +362,7 @@ export default function QuizAttempt() {
         ) : (
           <button
             type="button"
-            onClick={() => attemptId && soumettre(attemptId)}
+            onClick={() => setConfirmationEnvoi(true)}
             disabled={soumission}
             className="flex-1 bg-pitch text-white font-medium rounded py-2 text-sm disabled:opacity-60"
           >
@@ -343,6 +370,41 @@ export default function QuizAttempt() {
           </button>
         )}
       </div>
+
+      {confirmationEnvoi && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-surface border border-border rounded-lg p-5 max-w-sm w-full">
+            <p className="text-sm font-semibold mb-3">Terminer le QCM ?</p>
+            {questionsSansReponse.length > 0 ? (
+              <p className="text-sm text-card-red bg-card-red-bg rounded px-3 py-2 mb-4">
+                {questionsSansReponse.length} question(s) sans réponse :{' '}
+                {questionsSansReponse.map((q) => questions.indexOf(q) + 1).join(', ')}.
+              </p>
+            ) : (
+              <p className="text-sm text-muted mb-4">Toutes les questions ont une réponse.</p>
+            )}
+            <p className="text-xs text-muted mb-4">Cette action est définitive et ne pourra pas être annulée.</p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmationEnvoi(false)}
+                disabled={soumission}
+                className="flex-1 border border-border rounded py-2 text-sm disabled:opacity-60"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={() => attemptId && soumettre(attemptId)}
+                disabled={soumission}
+                className="flex-1 bg-pitch text-white font-medium rounded py-2 text-sm disabled:opacity-60"
+              >
+                {soumission ? 'Envoi…' : 'Confirmer et envoyer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppLayout>
   );
 }
