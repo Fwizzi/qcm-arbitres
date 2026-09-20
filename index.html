@@ -10,6 +10,20 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
+    <script>
+      // Fait le pendant de public/404.html : si cette page a été atteinte
+      // via son détour (adresse encodée dans ?redirect=), on restaure la
+      // vraie adresse avant que l'application ne démarre, pour que le
+      // routeur (et le filet de sécurité de main.tsx) voient la bonne
+      // page dès le premier rendu.
+      (function () {
+        var params = new URLSearchParams(location.search);
+        var redirige = params.get('redirect');
+        if (redirige) {
+          history.replaceState(null, '', redirige);
+        }
+      })();
+    </script>
   </head>
   <body class="bg-canvas text-ink font-sans antialiased">
     <div id="root"></div>
