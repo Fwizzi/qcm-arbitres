@@ -35,6 +35,7 @@ export default function QuizForm() {
 
   const [confirmation, setConfirmation] = useState(false);
   const [popupPublication, setPopupPublication] = useState(false);
+  const [popupGroupeManquant, setPopupGroupeManquant] = useState(false);
 
   const [titre, setTitre] = useState('');
   const [statut, setStatut] = useState<'draft' | 'published' | null>(null);
@@ -170,6 +171,14 @@ export default function QuizForm() {
     }
   }
 
+  function demanderPublication() {
+    if (groupesSelectionnes.size === 0) {
+      setPopupGroupeManquant(true);
+      return;
+    }
+    enregistrer('published');
+  }
+
   async function supprimerBrouillon() {
     if (!id) return;
     setSuppression(true);
@@ -231,6 +240,25 @@ export default function QuizForm() {
               className="w-full bg-pitch text-white font-medium rounded py-2 text-sm"
             >
               Fermer
+            </button>
+          </div>
+        </div>
+      )}
+
+      {popupGroupeManquant && (
+        <div className="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-surface rounded-lg p-5 max-w-sm w-full text-center">
+            <p className="text-lg font-semibold mb-2">Aucun groupe sélectionné</p>
+            <p className="text-sm text-muted mb-4">
+              Sélectionne au moins un groupe destinataire avant de publier ce QCM : sans groupe,
+              aucun arbitre ne pourra y accéder.
+            </p>
+            <button
+              type="button"
+              onClick={() => setPopupGroupeManquant(false)}
+              className="w-full bg-pitch text-white font-medium rounded py-2 text-sm"
+            >
+              Compris
             </button>
           </div>
         </div>
@@ -382,7 +410,7 @@ export default function QuizForm() {
           <button
             type="button"
             disabled={enregistrement || !titre || !dateDebut || !dateFin}
-            onClick={() => enregistrer('published')}
+            onClick={demanderPublication}
             className="flex-1 bg-pitch text-white font-medium rounded py-2 text-sm disabled:opacity-60"
           >
             Publier
