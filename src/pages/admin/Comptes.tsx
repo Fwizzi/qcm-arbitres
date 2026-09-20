@@ -37,7 +37,7 @@ const LABELS: Record<AppRole, string> = {
   arbitre: 'Arbitre',
 };
 const STATUT_FILE: Record<InviteQueueRow['status'], { label: string; className: string }> = {
-  en_attente: { label: 'En attente', className: 'bg-canvas text-muted' },
+  en_attente: { label: 'En attente', className: 'bg-card-yellow-bg text-card-yellow' },
   en_cours: { label: 'Envoi en cours…', className: 'bg-card-yellow-bg text-card-yellow' },
   envoye: { label: 'Envoyée', className: 'bg-pitch-light text-pitch-dark' },
   echec: { label: 'Échec', className: 'bg-card-red-bg text-card-red' },
@@ -99,6 +99,9 @@ export default function Comptes() {
   const [fileAttente, setFileAttente] = useState<InviteQueueRow[]>([]);
   const [chargementFile, setChargementFile] = useState(true);
   const [annulationId, setAnnulationId] = useState<string | null>(null);
+  const [fileAttenteOuverte, setFileAttenteOuverte] = useState(true);
+  const [rechercheFile, setRechercheFile] = useState('');
+  const [filtreStatutFile, setFiltreStatutFile] = useState<'tous' | InviteQueueRow['status']>('tous');
 
   async function charger() {
     setLoading(true);
@@ -477,6 +480,13 @@ export default function Comptes() {
     return p.full_name.toLowerCase().includes(texte) || p.email.toLowerCase().includes(texte);
   });
 
+  const fileAttenteFiltree = fileAttente.filter((f) => {
+    if (filtreStatutFile !== 'tous' && f.status !== filtreStatutFile) return false;
+    const texte = rechercheFile.trim().toLowerCase();
+    if (!texte) return true;
+    return f.full_name.toLowerCase().includes(texte) || f.email.toLowerCase().includes(texte);
+  });
+
   return (
     <AppLayout>
       <AdminNav />
@@ -663,36 +673,75 @@ export default function Comptes() {
 
       {!chargementFile && fileAttente.length > 0 && (
         <div className="mb-6">
-          <p className="text-sm font-medium mb-2">File d'attente des invitations</p>
-          <ul className="flex flex-col gap-2">
-            {fileAttente.map((f) => {
-              const statut = STATUT_FILE[f.status];
-              return (
-                <li key={f.id} className="bg-surface border border-border rounded p-3">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-sm font-medium">{f.full_name}</span>
-                    <span className={`text-xs rounded px-2 py-0.5 shrink-0 ${statut.className}`}>
-                      {statut.label}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted mb-1">
-                    {f.email} · {f.roles.map((r) => LABELS[r]).join(', ')}
-                  </p>
-                  {f.erreur && <p className="text-xs text-card-red mb-1">{f.erreur}</p>}
-                  {f.status === 'en_attente' && (
-                    <button
-                      type="button"
-                      onClick={() => annulerInvitation(f.id)}
-                      disabled={annulationId === f.id}
-                      className="text-xs text-card-red underline disabled:opacity-60"
-                    >
-                      {annulationId === f.id ? 'Annulation…' : 'Annuler'}
-                    </button>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <p className="text-sm font-medium">File d'attente des invitations ({fileAttente.length})</p>
+            <button
+              type="button"
+              onClick={() => setFileAttenteOuverte((v) => !v)}
+              className="text-xs text-muted underline shrink-0"
+            >
+              {fileAttenteOuverte ? 'Masquer' : 'Afficher'}
+            </button>
+          </div>
+
+          {fileAttenteOuverte && (
+            <>
+              <div className="flex gap-2 mb-2">
+                <input
+                  type="text"
+                  value={rechercheFile}
+                  onChange={(e) => setRechercheFile(e.target.value)}
+                  placeholder="Rechercher par nom ou e-mail…"
+                  className="flex-1 border border-border rounded px-3 py-1.5 text-sm"
+                />
+                <select
+                  value={filtreStatutFile}
+                  onChange={(e) => setFiltreStatutFile(e.target.value as 'tous' | InviteQueueRow['status'])}
+                  className="border border-border rounded px-2 py-1.5 text-sm"
+                >
+                  <option value="tous">Tous les statuts</option>
+                  <option value="en_attente">En attente</option>
+                  <option value="en_cours">Envoi en cours</option>
+                  <option value="envoye">Envoyée</option>
+                  <option value="echec">Échec</option>
+                </select>
+              </div>
+
+              {fileAttenteFiltree.length === 0 ? (
+                <p className="text-xs text-muted">Aucune invitation ne correspond à ce filtre.</p>
+              ) : (
+                <ul className="flex flex-col gap-2">
+                  {fileAttenteFiltree.map((f) => {
+                    const statut = STATUT_FILE[f.status];
+                    return (
+                      <li key={f.id} className="bg-surface border border-border rounded p-3">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="text-sm font-medium">{f.full_name}</span>
+                          <span className={`text-xs rounded px-2 py-0.5 shrink-0 ${statut.className}`}>
+                            {statut.label}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted mb-1">
+                          {f.email} · {f.roles.map((r) => LABELS[r]).join(', ')}
+                        </p>
+                        {f.erreur && <p className="text-xs text-card-red mb-1">{f.erreur}</p>}
+                        {f.status === 'en_attente' && (
+                          <button
+                            type="button"
+                            onClick={() => annulerInvitation(f.id)}
+                            disabled={annulationId === f.id}
+                            className="text-xs text-card-red underline disabled:opacity-60"
+                          >
+                            {annulationId === f.id ? 'Annulation…' : 'Annuler'}
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </>
+          )}
         </div>
       )}
 
