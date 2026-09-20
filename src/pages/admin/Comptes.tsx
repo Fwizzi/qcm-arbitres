@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 import AppLayout from '../../components/AppLayout';
 import AdminNav from '../../components/AdminNav';
 import { supabase } from '../../lib/supabaseClient';
@@ -13,12 +13,45 @@ interface PersonneAvecRoles {
   roles: AppRole[];
 }
 
+interface LigneImport {
+  full_name: string;
+  email: string;
+  roles: AppRole[];
+}
+
+interface InviteQueueRow {
+  id: string;
+  full_name: string;
+  email: string;
+  roles: AppRole[];
+  status: 'en_attente' | 'en_cours' | 'envoye' | 'echec';
+  created_at: string;
+  sent_at: string | null;
+  erreur: string | null;
+}
+
 const TOUS_LES_ROLES: AppRole[] = ['admin', 'formateur', 'arbitre'];
 const LABELS: Record<AppRole, string> = {
   admin: 'Administrateur',
   formateur: 'Formateur',
   arbitre: 'Arbitre',
 };
+const STATUT_FILE: Record<InviteQueueRow['status'], { label: string; className: string }> = {
+  en_attente: { label: 'En attente', className: 'bg-canvas text-muted' },
+  en_cours: { label: 'Envoi en cours…', className: 'bg-card-yellow-bg text-card-yellow' },
+  envoye: { label: 'Envoyée', className: 'bg-pitch-light text-pitch-dark' },
+  echec: { label: 'Échec', className: 'bg-card-red-bg text-card-red' },
+};
+
+function formatDateHeure(d: string) {
+  return new Date(d).toLocaleString('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
 
 export default function Comptes() {
   const [personnes, setPersonnes] = useState<PersonneAvecRoles[]>([]);
@@ -38,12 +71,29 @@ export default function Comptes() {
   const [suppression, setSuppression] = useState(false);
   const [erreurSuppression, setErreurSuppression] = useState<string | null>(null);
 
+  // --- Création d'un compte (un par un) ---
   const [formulaireOuvert, setFormulaireOuvert] = useState(false);
   const [nomComplet, setNomComplet] = useState('');
   const [email, setEmail] = useState('');
-  const [motDePasse, setMotDePasse] = useState('');
+  const [rolesCreation, setRolesCreation] = useState<AppRole[]>([]);
+  const [methodeCreation, setMethodeCreation] = useState<'email' | 'lien'>('email');
   const [erreurCreation, setErreurCreation] = useState<string | null>(null);
   const [creation, setCreation] = useState(false);
+  const [confirmationEmail, setConfirmationEmail] = useState<string | null>(null);
+  const [lienGenere, setLienGenere] = useState<string | null>(null);
+  const [lienCopie, setLienCopie] = useState(false);
+
+  // --- Import Excel (plusieurs comptes d'un coup) ---
+  const [importOuvert, setImportOuvert] = useState(false);
+  const [apercuImport, setApercuImport] = useState<LigneImport[] | null>(null);
+  const [erreursImport, setErreursImport] = useState<string[]>([]);
+  const [important, setImportant] = useState(false);
+  const [messageImport, setMessageImport] = useState<string | null>(null);
+
+  // --- File d'attente des invitations ---
+  const [fileAttente, setFileAttente] = useState<InviteQueueRow[]>([]);
+  const [chargementFile, setChargementFile] = useState(true);
+  const [annulationId, setAnnulationId] = useState<string | null>(null);
 
   async function charger() {
     setLoading(true);
@@ -72,8 +122,19 @@ export default function Comptes() {
     setLoading(false);
   }
 
+  async function chargerFileAttente() {
+    setChargementFile(true);
+    const { data } = await supabase
+      .from('invite_queue')
+      .select('id, full_name, email, roles, status, created_at, sent_at, erreur')
+      .order('created_at', { ascending: true });
+    setFileAttente((data ?? []) as InviteQueueRow[]);
+    setChargementFile(false);
+  }
+
   useEffect(() => {
     charger();
+    chargerFileAttente();
   }, []);
 
   async function basculerRole(personneId: string, role: AppRole, actif: boolean) {
@@ -167,28 +228,182 @@ export default function Comptes() {
     await charger();
   }
 
+  function basculerRoleCreation(role: AppRole) {
+    setRolesCreation((prev) => (prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]));
+  }
+
+  function reinitialiserFormulaireCreation() {
+    setNomComplet('');
+    setEmail('');
+    setRolesCreation([]);
+    setMethodeCreation('email');
+    setConfirmationEmail(null);
+    setLienGenere(null);
+    setLienCopie(false);
+  }
+
   async function creerCompte(e: FormEvent) {
     e.preventDefault();
     setErreurCreation(null);
+    setConfirmationEmail(null);
+    setLienGenere(null);
+
+    if (rolesCreation.length === 0) {
+      setErreurCreation('Sélectionne au moins un rôle.');
+      return;
+    }
+
     setCreation(true);
 
-    const { data, error } = await supabase.functions.invoke('create-user', {
-      body: { email, password: motDePasse, full_name: nomComplet },
-    });
+    if (methodeCreation === 'lien') {
+      const { data, error } = await supabase.functions.invoke('create-user', {
+        body: { action: 'generate-invite-link', email, full_name: nomComplet, roles: rolesCreation },
+      });
+      setCreation(false);
 
+      if (error || data?.error) {
+        setErreurCreation(await extraireErreurFonction(error, data));
+        return;
+      }
+      setLienGenere(data.link);
+      await logActivity(`a créé un lien d'activation pour ${nomComplet}`, 'profile', data?.id);
+      await charger();
+      return;
+    }
+
+    // methodeCreation === 'email'
+    const { data, error } = await supabase.functions.invoke('create-user', {
+      body: { action: 'queue-invite', people: [{ full_name: nomComplet, email, roles: rolesCreation }] },
+    });
     setCreation(false);
 
     if (error || data?.error) {
       setErreurCreation(await extraireErreurFonction(error, data));
       return;
     }
+    if (data?.queued === 0) {
+      setErreurCreation(data?.erreurs?.[0]?.erreur ?? "La mise en file d'attente a échoué.");
+      return;
+    }
+    setConfirmationEmail(
+      `Invitation mise en file d'attente. Envoi automatique par e-mail prévu vers le ${formatDateHeure(data.dernierEnvoiEstime)}.`
+    );
+    await logActivity(`a mis en file d'attente l'invitation de ${nomComplet}`, 'profile');
+    await chargerFileAttente();
+  }
 
-    setNomComplet('');
-    setEmail('');
-    setMotDePasse('');
-    setFormulaireOuvert(false);
-    await logActivity(`a créé le compte de ${nomComplet}`, 'profile', data?.id);
-    await charger();
+  async function copierLien() {
+    if (!lienGenere) return;
+    await navigator.clipboard.writeText(lienGenere);
+    setLienCopie(true);
+  }
+
+  async function telechargerModele() {
+    const XLSX = await import('xlsx');
+    const feuilleComptes = XLSX.utils.aoa_to_sheet([
+      ['Nom complet', 'E-mail', 'Rôle'],
+      ['Jean Dupont', 'jean.dupont@exemple.fr', 'arbitre'],
+    ]);
+    const feuilleInstructions = XLSX.utils.aoa_to_sheet([
+      ['Instructions'],
+      ['Une ligne par personne à créer.'],
+      ['Colonne "Rôle" : exactement admin, formateur ou arbitre (un seul par ligne).'],
+      ["Un 2e rôle pourra être ajouté ensuite depuis la fiche du compte, une fois créé."],
+      ["Supprime la ligne d'exemple (Jean Dupont) avant de déposer le fichier."],
+    ]);
+    const classeur = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(classeur, feuilleComptes, 'Comptes');
+    XLSX.utils.book_append_sheet(classeur, feuilleInstructions, 'Instructions');
+    XLSX.writeFile(classeur, 'modele-nouveaux-comptes.xlsx');
+  }
+
+  async function importerFichier(e: ChangeEvent<HTMLInputElement>) {
+    const fichier = e.target.files?.[0];
+    e.target.value = '';
+    if (!fichier) return;
+
+    setMessageImport(null);
+    setErreursImport([]);
+    setApercuImport(null);
+
+    const XLSX = await import('xlsx');
+    const buffer = await fichier.arrayBuffer();
+    const classeur = XLSX.read(buffer, { type: 'array' });
+    const feuille = classeur.Sheets[classeur.SheetNames[0]];
+    const lignes = XLSX.utils.sheet_to_json<Record<string, unknown>>(feuille, { defval: '' });
+
+    const personnesValides: LigneImport[] = [];
+    const erreurs: string[] = [];
+    const emailsVus = new Set<string>();
+
+    lignes.forEach((ligne, i) => {
+      const numeroLigne = i + 2; // +1 pour l'en-tête, +1 car i commence à 0
+      const nom = String(ligne['Nom complet'] ?? '').trim();
+      const emailLigne = String(ligne['E-mail'] ?? '').trim().toLowerCase();
+      const role = String(ligne['Rôle'] ?? '').trim().toLowerCase();
+
+      if (!nom && !emailLigne && !role) return; // ligne vide, ignorée silencieusement
+
+      if (!nom) {
+        erreurs.push(`Ligne ${numeroLigne} : nom manquant.`);
+        return;
+      }
+      if (!emailLigne || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailLigne)) {
+        erreurs.push(`Ligne ${numeroLigne} : e-mail invalide (${emailLigne || 'vide'}).`);
+        return;
+      }
+      if (!TOUS_LES_ROLES.includes(role as AppRole)) {
+        erreurs.push(`Ligne ${numeroLigne} : rôle "${role}" invalide (attendu : admin, formateur ou arbitre).`);
+        return;
+      }
+      if (emailsVus.has(emailLigne)) {
+        erreurs.push(`Ligne ${numeroLigne} : e-mail en double dans le fichier (${emailLigne}).`);
+        return;
+      }
+      emailsVus.add(emailLigne);
+      personnesValides.push({ full_name: nom, email: emailLigne, roles: [role as AppRole] });
+    });
+
+    setErreursImport(erreurs);
+    setApercuImport(personnesValides);
+  }
+
+  async function confirmerImport() {
+    if (!apercuImport || apercuImport.length === 0) return;
+    setImportant(true);
+    setMessageImport(null);
+
+    const { data, error } = await supabase.functions.invoke('create-user', {
+      body: { action: 'queue-invite', people: apercuImport },
+    });
+    setImportant(false);
+
+    if (error || data?.error) {
+      const messageErreur = await extraireErreurFonction(error, data);
+      setErreursImport((prev) => [...prev, messageErreur]);
+      return;
+    }
+
+    const erreursServeur = (data?.erreurs ?? []).map(
+      (e: { ligne: number; email: string; erreur: string }) =>
+        e.ligne > 0 ? `Ligne ${e.ligne + 1} : ${e.erreur}` : `${e.email} : ${e.erreur}`
+    );
+
+    setMessageImport(
+      `${data.queued} invitation(s) mise(s) en file d'attente.` +
+        (erreursServeur.length > 0 ? ` ${erreursServeur.length} ligne(s) ignorée(s), voir détail ci-dessous.` : '')
+    );
+    setErreursImport(erreursServeur);
+    setApercuImport(null);
+    await logActivity(`a importé ${data.queued} compte(s) via fichier Excel`, 'profile');
+    await chargerFileAttente();
+  }
+
+  async function annulerInvitation(id: string) {
+    setAnnulationId(id);
+    await supabase.from('invite_queue').delete().eq('id', id);
+    setAnnulationId(null);
+    await chargerFileAttente();
   }
 
   function initiales(nom: string) {
@@ -210,15 +425,31 @@ export default function Comptes() {
   return (
     <AppLayout>
       <AdminNav />
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 gap-2">
         <h1 className="text-lg font-semibold">Comptes</h1>
-        <button
-          type="button"
-          className="text-sm border border-border rounded px-3 py-1.5"
-          onClick={() => setFormulaireOuvert((v) => !v)}
-        >
-          + Nouveau
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            className="text-sm border border-border rounded px-3 py-1.5"
+            onClick={() => {
+              setImportOuvert((v) => !v);
+              setFormulaireOuvert(false);
+            }}
+          >
+            Import Excel
+          </button>
+          <button
+            type="button"
+            className="text-sm border border-border rounded px-3 py-1.5"
+            onClick={() => {
+              setFormulaireOuvert((v) => !v);
+              setImportOuvert(false);
+              reinitialiserFormulaireCreation();
+            }}
+          >
+            + Nouveau
+          </button>
+        </div>
       </div>
 
       {formulaireOuvert && (
@@ -241,34 +472,171 @@ export default function Comptes() {
             className="w-full border border-border rounded px-3 py-2 mb-3"
           />
 
-          <label className="block text-sm text-muted mb-1">Mot de passe provisoire</label>
-          <input
-            type="text"
-            required
-            minLength={8}
-            value={motDePasse}
-            onChange={(e) => setMotDePasse(e.target.value)}
-            className="w-full border border-border rounded px-3 py-2 mb-1"
-          />
-          <p className="text-xs text-muted mb-3">
-            8 caractères minimum. Transmets-le à la personne concernée ; elle pourra le changer
-            une fois connectée.
-          </p>
+          <label className="block text-sm text-muted mb-1">Rôle(s)</label>
+          <div className="flex flex-col gap-1.5 mb-3">
+            {TOUS_LES_ROLES.map((role) => (
+              <label key={role} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={rolesCreation.includes(role)}
+                  onChange={() => basculerRoleCreation(role)}
+                />
+                {LABELS[role]}
+              </label>
+            ))}
+          </div>
+
+          <label className="block text-sm text-muted mb-1">Activation du compte</label>
+          <div className="flex flex-col gap-1.5 mb-4">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="methode-creation"
+                checked={methodeCreation === 'email'}
+                onChange={() => setMethodeCreation('email')}
+              />
+              Envoyer une invitation par e-mail (la personne choisit son mot de passe)
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="methode-creation"
+                checked={methodeCreation === 'lien'}
+                onChange={() => setMethodeCreation('lien')}
+              />
+              Générer un lien que je transmets moi-même
+            </label>
+          </div>
 
           {erreurCreation && (
             <p role="alert" className="text-sm text-card-red bg-card-red-bg rounded px-3 py-2 mb-3">
               {erreurCreation}
             </p>
           )}
+          {confirmationEmail && (
+            <p className="text-sm text-pitch-dark bg-pitch-light rounded px-3 py-2 mb-3">{confirmationEmail}</p>
+          )}
+          {lienGenere && (
+            <div className="mb-3">
+              <p className="text-sm text-pitch-dark bg-pitch-light rounded-t px-3 py-2">
+                Compte créé. Transmets ce lien à la personne concernée :
+              </p>
+              <div className="flex gap-2 border border-t-0 border-border rounded-b p-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={lienGenere}
+                  className="flex-1 text-xs border border-border rounded px-2 py-1.5 bg-canvas"
+                  onFocus={(ev) => ev.target.select()}
+                />
+                <button
+                  type="button"
+                  onClick={copierLien}
+                  className="text-xs border border-border rounded px-3 shrink-0"
+                >
+                  {lienCopie ? 'Copié !' : 'Copier'}
+                </button>
+              </div>
+            </div>
+          )}
 
-          <button
-            type="submit"
-            disabled={creation}
-            className="w-full bg-pitch text-white font-medium rounded py-2 disabled:opacity-60"
-          >
-            {creation ? 'Création…' : 'Créer le compte'}
-          </button>
+          {!lienGenere && (
+            <button
+              type="submit"
+              disabled={creation}
+              className="w-full bg-pitch text-white font-medium rounded py-2 disabled:opacity-60"
+            >
+              {creation ? 'Création…' : 'Créer le compte'}
+            </button>
+          )}
         </form>
+      )}
+
+      {importOuvert && (
+        <div className="bg-surface border border-border rounded p-4 mb-4">
+          <p className="text-sm text-muted mb-3">
+            Dépose un fichier Excel listant plusieurs comptes à créer d'un coup. Toutes les invitations sont
+            envoyées automatiquement par e-mail, au fur et à mesure.
+          </p>
+          <div className="flex gap-2 mb-3">
+            <button
+              type="button"
+              onClick={telechargerModele}
+              className="flex-1 text-sm border border-border rounded py-2"
+            >
+              Télécharger le modèle
+            </button>
+            <label className="flex-1 text-sm border border-border rounded py-2 text-center cursor-pointer bg-pitch text-white font-medium">
+              Déposer un fichier
+              <input type="file" accept=".xlsx" onChange={importerFichier} className="hidden" />
+            </label>
+          </div>
+
+          {erreursImport.length > 0 && (
+            <div className="text-xs text-card-red bg-card-red-bg rounded px-3 py-2 mb-3 whitespace-pre-line">
+              {erreursImport.join('\n')}
+            </div>
+          )}
+          {messageImport && (
+            <p className="text-sm text-pitch-dark bg-pitch-light rounded px-3 py-2 mb-3">{messageImport}</p>
+          )}
+
+          {apercuImport && apercuImport.length > 0 && (
+            <div>
+              <p className="text-sm font-medium mb-2">{apercuImport.length} personne(s) prête(s) à importer</p>
+              <ul className="text-xs text-muted flex flex-col gap-1 mb-3 max-h-40 overflow-y-auto">
+                {apercuImport.map((p, i) => (
+                  <li key={i}>
+                    {p.full_name} — {p.email} — {LABELS[p.roles[0]]}
+                  </li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                onClick={confirmerImport}
+                disabled={important}
+                className="w-full bg-pitch text-white font-medium rounded py-2 text-sm disabled:opacity-60"
+              >
+                {important ? 'Import…' : `Confirmer l'import de ${apercuImport.length} compte(s)`}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!chargementFile && fileAttente.length > 0 && (
+        <div className="mb-6">
+          <p className="text-sm font-medium mb-2">File d'attente des invitations</p>
+          <ul className="flex flex-col gap-2">
+            {fileAttente.map((f) => {
+              const statut = STATUT_FILE[f.status];
+              return (
+                <li key={f.id} className="bg-surface border border-border rounded p-3">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-sm font-medium">{f.full_name}</span>
+                    <span className={`text-xs rounded px-2 py-0.5 shrink-0 ${statut.className}`}>
+                      {statut.label}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted mb-1">
+                    {f.email} · {f.roles.map((r) => LABELS[r]).join(', ')}
+                  </p>
+                  {f.erreur && <p className="text-xs text-card-red mb-1">{f.erreur}</p>}
+                  {f.status === 'en_attente' && (
+                    <button
+                      type="button"
+                      onClick={() => annulerInvitation(f.id)}
+                      disabled={annulationId === f.id}
+                      className="text-xs text-card-red underline disabled:opacity-60"
+                    >
+                      {annulationId === f.id ? 'Annulation…' : 'Annuler'}
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
 
       {loading && <p className="text-sm text-muted">Chargement…</p>}
