@@ -124,6 +124,11 @@ export default function QuizForm() {
     setErreur(null);
     setEnregistrement(true);
 
+    // Capturé avant toute modification : ne notifier les arbitres par mail
+    // que lors du tout premier passage en "published", jamais lors d'une
+    // republication après modification.
+    const etaitDejaPublie = statut === 'published';
+
     const payload: Record<string, unknown> = {
       formateur_id: session.user.id,
       title: titre,
@@ -161,6 +166,13 @@ export default function QuizForm() {
       await supabase
         .from('quiz_groups')
         .insert(Array.from(groupesSelectionnes).map((groupId) => ({ quiz_id: id, group_id: groupId })));
+    }
+
+    if (nouveauStatut === 'published' && !etaitDejaPublie) {
+      // Envoi "fire and forget" : on n'attend pas la fin (l'envoi réel des
+      // mails se poursuit côté serveur) et un échec ne doit pas empêcher la
+      // publication, déjà effective à ce stade.
+      supabase.functions.invoke('notify-quiz-published', { body: { quizId: id } }).catch(() => {});
     }
 
     setEnregistrement(false);
