@@ -31,6 +31,68 @@ function rolesValides(roles: unknown): roles is string[] {
   );
 }
 
+// Envoie immédiatement une invitation qui vient d'être insérée dans
+// invite_queue (utilisé quand la file était vide : pas de raison de faire
+// attendre jusqu'à 30 minutes le tout premier envoi). Reprend exactement
+// la même logique que send-queued-invites (réservation puis envoi), pour
+// qu'une ligne traitée ici finisse dans le même état qu'une ligne traitée
+// plus tard par la tâche planifiée.
+async function envoyerInvitationMaintenant(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  ligne: { id: string; full_name: string; email: string; roles: string[] }
+): Promise<{ ok: boolean; erreur: string | null; transitoire: boolean }> {
+  const { data: claimed } = await supabaseAdmin
+    .from('invite_queue')
+    .update({ status: 'en_cours' })
+    .eq('id', ligne.id)
+    .eq('status', 'en_attente')
+    .select()
+    .maybeSingle();
+
+  if (!claimed) {
+    return { ok: false, erreur: null, transitoire: false };
+  }
+
+  const { data: created, error: inviteErr } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+    ligne.email,
+    { data: { full_name: ligne.full_name }, redirectTo: `${SITE_URL}/activer-mon-compte` }
+  );
+
+  if (inviteErr || !created?.user) {
+    const message = inviteErr?.message ?? 'Échec inconnu.';
+    // Un dépassement de quota est temporaire : on relâche la ligne (retour
+    // à 'en_attente') pour que la tâche planifiée la reprenne
+    // automatiquement dès qu'un créneau d'envoi redevient disponible,
+    // plutôt que de la laisser bloquée sans suite sur 'echec'.
+    const estQuotaDepasse = message.toLowerCase().includes('rate limit');
+    await supabaseAdmin
+      .from('invite_queue')
+      .update(
+        estQuotaDepasse ? { status: 'en_attente', erreur: null } : { status: 'echec', erreur: message }
+      )
+      .eq('id', ligne.id);
+    return { ok: false, erreur: message, transitoire: estQuotaDepasse };
+  }
+
+  const { error: rolesErr } = await supabaseAdmin
+    .from('user_roles')
+    .insert(ligne.roles.map((role) => ({ user_id: created.user!.id, role })));
+
+  await supabaseAdmin
+    .from('invite_queue')
+    .update({
+      status: 'envoye',
+      sent_at: new Date().toISOString(),
+      user_id: created.user.id,
+      erreur: rolesErr
+        ? "Compte créé et e-mail envoyé, mais les rôles n'ont pas pu être attribués : attribue-les manuellement dans Comptes."
+        : null,
+    })
+    .eq('id', ligne.id);
+
+  return { ok: true, erreur: null, transitoire: false };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -184,26 +246,57 @@ Deno.serve(async (req: Request) => {
         return json({ queued: 0, erreurs: erreursLignes }, 200);
       }
 
-      const { error: insertErr } = await supabaseAdmin.from('invite_queue').insert(
-        aInserer.map((l) => ({
-          full_name: l.full_name,
-          email: l.email,
-          roles: l.roles,
-          created_by: userData.user.id,
-        }))
-      );
+      const { data: inserted, error: insertErr } = await supabaseAdmin
+        .from('invite_queue')
+        .insert(
+          aInserer.map((l) => ({
+            full_name: l.full_name,
+            email: l.email,
+            roles: l.roles,
+            created_by: userData.user.id,
+          }))
+        )
+        .select('id, full_name, email, roles');
 
-      if (insertErr) {
+      if (insertErr || !inserted) {
         return json({ error: "La mise en file d'attente a échoué. Réessaie dans un instant." }, 400);
       }
 
-      const positionDepart = emailsEnAttente.size; // nombre déjà devant ce lot
-      const dernierEnvoiEstime = new Date(
-        Date.now() + (positionDepart + aInserer.length) * 30 * 60_000
-      ).toISOString();
+      // Si personne n'attendait déjà dans la file, on envoie tout de suite
+      // le tout premier e-mail de ce lot plutôt que de faire patienter
+      // jusqu'à 30 minutes (cas le plus courant : ajout d'une seule
+      // personne à la fois). S'il y en a d'autres dans ce même lot (import
+      // en masse), elles restent en file, traitées comme d'habitude par
+      // la tâche planifiée.
+      let envoyeImmediatement = false;
+      let echecImmediat: string | null = null;
+      if (emailsEnAttente.size === 0) {
+        const premiere = inserted.find((l) => l.email === aInserer[0].email);
+        if (premiere) {
+          const resultat = await envoyerInvitationMaintenant(
+            supabaseAdmin,
+            premiere as { id: string; full_name: string; email: string; roles: string[] }
+          );
+          envoyeImmediatement = resultat.ok;
+          // Un échec transitoire (quota) remet la ligne en file d'attente
+          // normale (voir envoyerInvitationMaintenant) : ce n'est pas un
+          // échec à signaler, juste une invitation qui sera reprise
+          // automatiquement au prochain passage de la tâche planifiée.
+          if (!resultat.ok && resultat.erreur && !resultat.transitoire) {
+            echecImmediat = resultat.erreur;
+          }
+        }
+      }
+
+      const dejaTraite = (envoyeImmediatement ? 1 : 0) + (echecImmediat ? 1 : 0);
+      const nombreRestantEnFile = aInserer.length - dejaTraite;
+      const dernierEnvoiEstime =
+        nombreRestantEnFile > 0
+          ? new Date(Date.now() + (emailsEnAttente.size + nombreRestantEnFile) * 30 * 60_000).toISOString()
+          : null;
 
       return json(
-        { queued: aInserer.length, erreurs: erreursLignes, dernierEnvoiEstime },
+        { queued: aInserer.length, erreurs: erreursLignes, envoyeImmediatement, echecImmediat, dernierEnvoiEstime },
         200
       );
     }
@@ -218,6 +311,35 @@ Deno.serve(async (req: Request) => {
       }
       if (!rolesValides(roles)) {
         return json({ error: 'Au moins un rôle est requis.' }, 400);
+      }
+
+      // Un compte existe-t-il déjà pour cet e-mail ? (ex. invitation
+      // envoyée précédemment dont le lien a expiré ou a été perdu).
+      // Supabase refuse de recréer un compte existant avec type "invite" ;
+      // on génère alors un lien de type "recovery", qui fonctionne pour un
+      // compte déjà existant et permet exactement la même chose : arriver
+      // sur la page d'activation et choisir son mot de passe. Les rôles ne
+      // sont pas réattribués dans ce cas (déjà en place depuis la première
+      // invitation) ; l'admin peut les ajuster depuis la fiche du compte.
+      const { data: profilExistant } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .ilike('email', email)
+        .maybeSingle();
+
+      if (profilExistant) {
+        const { data: linkRenvoi, error: erreurRenvoi } = await supabaseAdmin.auth.admin.generateLink({
+          type: 'recovery',
+          email,
+          options: { redirectTo: `${SITE_URL}/activer-mon-compte` },
+        });
+        if (erreurRenvoi || !linkRenvoi?.properties?.action_link) {
+          return json({ error: erreurRenvoi?.message ?? 'Échec de la génération du lien.' }, 400);
+        }
+        return json(
+          { id: profilExistant.id, link: linkRenvoi.properties.action_link, renvoi: true },
+          200
+        );
       }
 
       const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
@@ -241,7 +363,7 @@ Deno.serve(async (req: Request) => {
         return json({ error: 'Compte créé mais les rôles n\'ont pas pu être attribués. Attribue-les manuellement.' }, 200);
       }
 
-      return json({ id: linkData.user.id, link: linkData.properties?.action_link }, 200);
+      return json({ id: linkData.user.id, link: linkData.properties?.action_link, renvoi: false }, 200);
     }
 
     return json({ error: 'Action inconnue.' }, 400);
