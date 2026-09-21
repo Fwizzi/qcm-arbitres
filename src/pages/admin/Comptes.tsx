@@ -74,6 +74,9 @@ export default function Comptes() {
   const [lienActivationPanneau, setLienActivationPanneau] = useState<string | null>(null);
   const [erreurLienPanneau, setErreurLienPanneau] = useState<string | null>(null);
   const [lienPanneauCopie, setLienPanneauCopie] = useState(false);
+  const [renvoiEmailEnCours, setRenvoiEmailEnCours] = useState(false);
+  const [renvoiEmailConfirmation, setRenvoiEmailConfirmation] = useState<string | null>(null);
+  const [erreurRenvoiEmail, setErreurRenvoiEmail] = useState<string | null>(null);
 
   // --- Création d'un compte (un par un) ---
   const [formulaireOuvert, setFormulaireOuvert] = useState(false);
@@ -169,6 +172,8 @@ export default function Comptes() {
     setLienActivationPanneau(null);
     setErreurLienPanneau(null);
     setLienPanneauCopie(false);
+    setRenvoiEmailConfirmation(null);
+    setErreurRenvoiEmail(null);
   }
 
   async function enregistrerNom(personneId: string) {
@@ -231,6 +236,41 @@ export default function Comptes() {
     if (!lienActivationPanneau) return;
     await navigator.clipboard.writeText(lienActivationPanneau);
     setLienPanneauCopie(true);
+  }
+
+  async function renvoyerLienParEmail(p: PersonneAvecRoles) {
+    setErreurRenvoiEmail(null);
+    setRenvoiEmailConfirmation(null);
+
+    if (p.roles.length === 0) {
+      setErreurRenvoiEmail('Attribue au moins un rôle avant de renvoyer un lien.');
+      return;
+    }
+
+    setRenvoiEmailEnCours(true);
+    const { data, error } = await supabase.functions.invoke('create-user', {
+      body: {
+        action: 'generate-invite-link',
+        email: p.email,
+        full_name: p.full_name,
+        roles: p.roles,
+        envoyerParEmail: true,
+      },
+    });
+    setRenvoiEmailEnCours(false);
+
+    if (error || data?.error) {
+      setErreurRenvoiEmail(await extraireErreurFonction(error, data));
+      return;
+    }
+    if (!data.envoye) {
+      setErreurRenvoiEmail(
+        data.erreurEnvoi ?? "L'envoi a échoué. Utilise plutôt « Générer un nouveau lien d'activation » pour le copier toi-même."
+      );
+      return;
+    }
+    setRenvoiEmailConfirmation(`Lien renvoyé par e-mail à ${p.email}.`);
+    await logActivity(`a renvoyé le lien d'activation par e-mail à ${p.full_name}`, 'profile', p.id);
   }
 
   async function demanderConfirmationSuppression(p: PersonneAvecRoles) {
@@ -863,16 +903,32 @@ export default function Comptes() {
                     Si la personne n'a pas reçu ou a perdu son lien pour choisir elle-même son mot de
                     passe, génère un nouveau lien à lui transmettre.
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => genererLienActivationPanneau(p)}
-                    disabled={genererLienEnCours}
-                    className="text-xs border border-border rounded px-3 py-1.5 disabled:opacity-50"
-                  >
-                    {genererLienEnCours ? 'Génération…' : "Générer un nouveau lien d'activation"}
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => genererLienActivationPanneau(p)}
+                      disabled={genererLienEnCours}
+                      className="text-xs border border-border rounded px-3 py-1.5 disabled:opacity-50"
+                    >
+                      {genererLienEnCours ? 'Génération…' : "Générer un nouveau lien d'activation"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => renvoyerLienParEmail(p)}
+                      disabled={renvoiEmailEnCours}
+                      className="text-xs border border-border rounded px-3 py-1.5 disabled:opacity-50"
+                    >
+                      {renvoiEmailEnCours ? 'Envoi…' : 'Renvoyer le lien par e-mail'}
+                    </button>
+                  </div>
                   {erreurLienPanneau && (
                     <p className="text-xs text-card-red mt-1.5">{erreurLienPanneau}</p>
+                  )}
+                  {erreurRenvoiEmail && (
+                    <p className="text-xs text-card-red mt-1.5">{erreurRenvoiEmail}</p>
+                  )}
+                  {renvoiEmailConfirmation && (
+                    <p className="text-xs text-pitch-dark mt-1.5">{renvoiEmailConfirmation}</p>
                   )}
                   {lienActivationPanneau && (
                     <div className="flex gap-2 mt-1.5">
