@@ -20,7 +20,7 @@ const STATUT: Record<QuizRow['computed_status'], { label: string; className: str
   draft: { label: 'Brouillon', className: 'bg-canvas text-muted' },
   a_venir: { label: 'À venir', className: 'bg-card-yellow-bg text-card-yellow' },
   actif: { label: 'Actif', className: 'bg-pitch-light text-pitch-dark' },
-  expire: { label: 'Expiré', className: 'bg-canvas text-muted' },
+  expire: { label: 'Expiré', className: 'bg-card-red-bg text-card-red' },
 };
 
 // Ordre d'affichage : ce qui se passe maintenant en premier, ce qui est
