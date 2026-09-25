@@ -72,6 +72,7 @@ export default function QuizAttemptResult() {
   const [correctionIndisponible, setCorrectionIndisponible] = useState<string | null>(null);
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
   const [chargementMedia, setChargementMedia] = useState<string | null>(null);
+  const [erreurMedia, setErreurMedia] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -131,11 +132,14 @@ export default function QuizAttemptResult() {
   async function afficherMedia(question: QuestionGroupee) {
     if (!question.media_url || mediaUrls[question.id]) return;
     setChargementMedia(question.id);
+    setErreurMedia(null);
     const { data } = await supabase.functions.invoke('r2-upload-url', {
       body: { action: 'read', key: question.media_url },
     });
     if (data?.readUrl) {
       setMediaUrls((prev) => ({ ...prev, [question.id]: data.readUrl }));
+    } else {
+      setErreurMedia(question.id);
     }
     setChargementMedia(null);
   }
@@ -197,18 +201,23 @@ export default function QuizAttemptResult() {
                           <img src={mediaUrls[q.id]} alt="" className="w-full rounded max-h-48 object-contain" />
                         )
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() => afficherMedia(q)}
-                          disabled={chargementMedia === q.id}
-                          className="text-xs border border-border rounded px-3 py-1.5"
-                        >
-                          {chargementMedia === q.id
-                            ? 'Chargement…'
-                            : q.type === 'video'
-                              ? 'Revoir la vidéo'
-                              : "Revoir l'image"}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => afficherMedia(q)}
+                            disabled={chargementMedia === q.id}
+                            className="text-xs border border-border rounded px-3 py-1.5"
+                          >
+                            {chargementMedia === q.id
+                              ? 'Chargement…'
+                              : q.type === 'video'
+                                ? 'Revoir la vidéo'
+                                : "Revoir l'image"}
+                          </button>
+                          {erreurMedia === q.id && (
+                            <span className="text-xs text-card-red">Échec du chargement, réessaie.</span>
+                          )}
+                        </div>
                       )}
                     </div>
                   )}

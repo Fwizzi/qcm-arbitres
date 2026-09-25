@@ -28,6 +28,8 @@ export default function QuizAttempt() {
   const [indexActuel, setIndexActuel] = useState(0);
   const [selections, setSelections] = useState<Record<string, Set<string>>>({});
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
+  const [erreurMedia, setErreurMedia] = useState<string | null>(null);
+  const [tentativeMedia, setTentativeMedia] = useState(0);
   const [loading, setLoading] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
   const [erreurSelection, setErreurSelection] = useState<string | null>(null);
@@ -156,16 +158,26 @@ export default function QuizAttempt() {
     async function chargerMedia() {
       if (!questionActuelle || questionActuelle.type === 'text' || !questionActuelle.media_url) return;
       if (mediaUrls[questionActuelle.id]) return;
-      const { data } = await supabase.functions.invoke('r2-upload-url', {
-        body: { action: 'read', key: questionActuelle.media_url },
-      });
-      if (data?.readUrl) {
-        setMediaUrls((prev) => ({ ...prev, [questionActuelle.id]: data.readUrl }));
+      setErreurMedia(null);
+      // Jusqu'à 3 essais : une coupure réseau ponctuelle ne doit pas
+      // bloquer la question indéfiniment.
+      let derniereErreur: string | null = null;
+      for (let essai = 1; essai <= 3; essai++) {
+        const { data, error } = await supabase.functions.invoke('r2-upload-url', {
+          body: { action: 'read', key: questionActuelle.media_url },
+        });
+        if (data?.readUrl) {
+          setMediaUrls((prev) => ({ ...prev, [questionActuelle.id]: data.readUrl }));
+          return;
+        }
+        derniereErreur = data?.error ?? error?.message ?? 'Erreur inconnue.';
+        if (essai < 3) await new Promise((r) => setTimeout(r, 800 * essai));
       }
+      setErreurMedia(derniereErreur ?? "Le média n'a pas pu être chargé.");
     }
     chargerMedia();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questionActuelle]);
+  }, [questionActuelle, tentativeMedia]);
 
   function basculerOption(questionId: string, optionId: string, max: number) {
     const actuel = new Set(selections[questionId] ?? []);
@@ -303,10 +315,21 @@ export default function QuizAttempt() {
         <div className="bg-canvas rounded aspect-video flex items-center justify-center mb-4 overflow-hidden">
           {mediaUrls[questionActuelle.id] ? (
             questionActuelle.type === 'video' ? (
-              <video src={mediaUrls[questionActuelle.id]} controls className="w-full h-full" />
+              <video src={mediaUrls[questionActuelle.id]} controls preload="auto" className="w-full h-full" />
             ) : (
               <img src={mediaUrls[questionActuelle.id]} alt="" className="w-full h-full object-contain" />
             )
+          ) : erreurMedia ? (
+            <div className="flex flex-col items-center gap-2 px-4 text-center">
+              <span className="text-xs text-card-red">Le média n'a pas pu être chargé. Vérifie ta connexion.</span>
+              <button
+                type="button"
+                onClick={() => setTentativeMedia((n) => n + 1)}
+                className="text-xs font-medium bg-pitch text-white rounded px-3 py-1.5"
+              >
+                Réessayer
+              </button>
+            </div>
           ) : (
             <span className="text-xs text-muted">Chargement du média…</span>
           )}
