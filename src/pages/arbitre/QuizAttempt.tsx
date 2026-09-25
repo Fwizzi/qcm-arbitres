@@ -5,6 +5,11 @@ import { supabase } from '../../lib/supabaseClient';
 import { avecRetriesTimeout } from '../../lib/retryTimeout';
 import { useAuth } from '../../hooks/useAuth';
 
+// Marge silencieuse ajoutée au temps saisi par le formateur — voir la
+// migration 20260925213000_marge_dix_secondes_qcm.sql pour le détail et
+// le garde-fou côté serveur (doit rester la même valeur ici et là-bas).
+const MARGE_DEMARRAGE_MS = 10_000;
+
 interface QuestionExamen {
   id: string;
   type: 'video' | 'image' | 'text';
@@ -102,7 +107,11 @@ export default function QuizAttempt() {
         return;
       }
 
-      const limite = new Date(attempt.started_at).getTime() + quiz.time_limit_minutes * 60_000;
+      // Marge de 10s ajoutée au temps annoncé par le formateur (temps de
+      // lecture du pop-up + chargement de la première question), à tenir
+      // synchronisée avec la même marge côté serveur (submit_exam_attempt).
+      const limite =
+        new Date(attempt.started_at).getTime() + quiz.time_limit_minutes * 60_000 + MARGE_DEMARRAGE_MS;
       if (Date.now() >= limite) {
         await soumettre(attempt.id);
         return;
@@ -274,13 +283,14 @@ export default function QuizAttempt() {
   return (
     <AppLayout>
       <p className="text-xs text-muted mb-2">{titre}</p>
-      <div className="flex items-center justify-between mb-1 text-xs">
-        <span className="text-muted">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs text-muted">
           Question {indexActuel + 1} / {questions.length}
         </span>
-        <span className={tempsCritique ? 'text-card-red font-semibold' : 'text-muted'}>
-          {formatTemps(tempsRestant)} restantes
-        </span>
+        <div className={`flex items-baseline gap-1.5 ${tempsCritique ? 'text-card-red' : 'text-pitch-dark'}`}>
+          <span className="text-3xl font-bold tabular-nums leading-none">{formatTemps(tempsRestant)}</span>
+          <span className="text-xs font-medium">restantes</span>
+        </div>
       </div>
       <div className="h-1 bg-canvas rounded overflow-hidden mb-3">
         <div
