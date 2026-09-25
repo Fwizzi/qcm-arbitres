@@ -11,6 +11,13 @@ interface QuizVue {
   formateur_nom: string;
   repondus: number;
   cibles: number;
+  period_start: string;
+  period_end: string;
+}
+
+function formatDateAffichage(dateIso: string): string {
+  const [annee, mois, jour] = dateIso.split('-');
+  return `${jour}/${mois}/${annee}`;
 }
 
 const STATUT: Record<QuizVue['computed_status'], { label: string; className: string }> = {
@@ -29,6 +36,10 @@ export default function AdminDashboard() {
   const [nbNonRepondants, setNbNonRepondants] = useState(0);
   const [quizzes, setQuizzes] = useState<QuizVue[]>([]);
   const [recherche, setRecherche] = useState('');
+  const [filtreDebutDu, setFiltreDebutDu] = useState('');
+  const [filtreDebutAu, setFiltreDebutAu] = useState('');
+  const [filtreFinDu, setFiltreFinDu] = useState('');
+  const [filtreFinAu, setFiltreFinAu] = useState('');
 
   useEffect(() => {
     async function charger() {
@@ -44,7 +55,9 @@ export default function AdminDashboard() {
         { data: attempts },
       ] = await Promise.all([
         supabase.from('user_roles').select('user_id, role'),
-        supabase.from('quizzes_with_computed_status').select('id, title, formateur_id, computed_status'),
+        supabase
+          .from('quizzes_with_computed_status')
+          .select('id, title, formateur_id, computed_status, period_start, period_end'),
         supabase.from('profiles').select('id, full_name'),
         supabase.from('quiz_groups').select('quiz_id, group_id'),
         supabase.from('group_members').select('group_id, user_id'),
@@ -88,6 +101,8 @@ export default function AdminDashboard() {
           formateur_nom: nomsFormateurs[q.formateur_id] ?? '—',
           repondus: repondusIds.size,
           cibles: cibleIds.size,
+          period_start: q.period_start,
+          period_end: q.period_end,
         };
       });
 
@@ -101,9 +116,24 @@ export default function AdminDashboard() {
 
   const quizzesFiltres = quizzes.filter((q) => {
     const texte = recherche.trim().toLowerCase();
-    if (!texte) return true;
-    return q.title.toLowerCase().includes(texte) || q.formateur_nom.toLowerCase().includes(texte);
+    if (texte && !q.title.toLowerCase().includes(texte) && !q.formateur_nom.toLowerCase().includes(texte)) {
+      return false;
+    }
+    if (filtreDebutDu && q.period_start < filtreDebutDu) return false;
+    if (filtreDebutAu && q.period_start > filtreDebutAu) return false;
+    if (filtreFinDu && q.period_end < filtreFinDu) return false;
+    if (filtreFinAu && q.period_end > filtreFinAu) return false;
+    return true;
   });
+
+  const filtresDateActifs = Boolean(filtreDebutDu || filtreDebutAu || filtreFinDu || filtreFinAu);
+
+  function reinitialiserFiltresDate() {
+    setFiltreDebutDu('');
+    setFiltreDebutAu('');
+    setFiltreFinDu('');
+    setFiltreFinAu('');
+  }
 
   if (loading) {
     return (
@@ -149,9 +179,62 @@ export default function AdminDashboard() {
         className="w-full border border-border rounded px-3 py-2 mb-3 text-sm"
       />
 
+      <div className="bg-surface border border-border rounded p-3 mb-3">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-medium text-muted">Filtrer par date</p>
+          {filtresDateActifs && (
+            <button
+              type="button"
+              onClick={reinitialiserFiltresDate}
+              className="text-xs text-pitch-dark underline"
+            >
+              Réinitialiser
+            </button>
+          )}
+        </div>
+        <div className="flex flex-col gap-2.5">
+          <div>
+            <p className="text-xs text-muted mb-1">Début du QCM — entre le</p>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={filtreDebutDu}
+                onChange={(e) => setFiltreDebutDu(e.target.value)}
+                className="flex-1 border border-border rounded px-2 py-1.5 text-sm"
+              />
+              <span className="text-xs text-muted">et le</span>
+              <input
+                type="date"
+                value={filtreDebutAu}
+                onChange={(e) => setFiltreDebutAu(e.target.value)}
+                className="flex-1 border border-border rounded px-2 py-1.5 text-sm"
+              />
+            </div>
+          </div>
+          <div>
+            <p className="text-xs text-muted mb-1">Fin du QCM — entre le</p>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={filtreFinDu}
+                onChange={(e) => setFiltreFinDu(e.target.value)}
+                className="flex-1 border border-border rounded px-2 py-1.5 text-sm"
+              />
+              <span className="text-xs text-muted">et le</span>
+              <input
+                type="date"
+                value={filtreFinAu}
+                onChange={(e) => setFiltreFinAu(e.target.value)}
+                className="flex-1 border border-border rounded px-2 py-1.5 text-sm"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
       {quizzes.length === 0 && <p className="text-sm text-muted">Aucun QCM pour le moment.</p>}
       {quizzes.length > 0 && quizzesFiltres.length === 0 && (
-        <p className="text-sm text-muted">Aucun QCM ne correspond à cette recherche.</p>
+        <p className="text-sm text-muted">Aucun QCM ne correspond à ces critères.</p>
       )}
       <ul className="flex flex-col gap-2">
         {quizzesFiltres.map((q) => {
@@ -170,6 +253,9 @@ export default function AdminDashboard() {
                 </div>
                 <p className="text-xs text-muted">
                   {q.formateur_nom} · {q.repondus}/{q.cibles} répondus
+                </p>
+                <p className="text-xs text-muted">
+                  Du {formatDateAffichage(q.period_start)} au {formatDateAffichage(q.period_end)}
                 </p>
               </Link>
             </li>
