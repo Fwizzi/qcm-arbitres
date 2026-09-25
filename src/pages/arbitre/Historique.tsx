@@ -13,6 +13,110 @@ interface LigneHistorique {
   score: number | null;
 }
 
+const OPTIONS_NOMBRE_QCM = [3, 5, 10] as const;
+
+function formatDateCourte(iso: string): string {
+  return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+}
+
+// Petit graphique d'évolution en SVG "fait main" (pas de librairie de
+// graphiques) : léger, sans dépendance supplémentaire ni image à générer.
+function GraphiqueEvolution({ lignes }: { lignes: LigneHistorique[] }) {
+  const [nombre, setNombre] = useState<(typeof OPTIONS_NOMBRE_QCM)[number]>(5);
+
+  // lignes est trié du plus récent au plus ancien : on prend les N plus
+  // récents avec une note connue, puis on remet dans l'ordre chronologique
+  // (ancien -> récent) pour une lecture naturelle de gauche à droite.
+  const donnees = lignes
+    .filter((l): l is LigneHistorique & { score: number } => l.score !== null)
+    .slice(0, nombre)
+    .slice()
+    .reverse();
+
+  const largeur = 300;
+  const hauteur = 170;
+  const gaucheAxe = 30;
+  const droiteMarge = 10;
+  const hautMarge = 12;
+  const basAxe = 100;
+  const n = donnees.length;
+
+  const x = (i: number) =>
+    n <= 1 ? (gaucheAxe + (largeur - droiteMarge)) / 2 : gaucheAxe + (i / (n - 1)) * (largeur - droiteMarge - gaucheAxe);
+  const y = (score: number) => basAxe - (score / 100) * (basAxe - hautMarge);
+
+  const points = donnees.map((d, i) => ({ x: x(i), y: y(d.score), d }));
+  const polyline = points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const labelsInclines = n > 5;
+
+  return (
+    <div className="bg-surface border border-border rounded p-3 mb-4">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-sm font-medium">Évolution des notes</p>
+        <div className="flex gap-1">
+          {OPTIONS_NOMBRE_QCM.map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => setNombre(opt)}
+              className={`text-xs rounded px-2 py-1 border ${
+                nombre === opt ? 'bg-pitch text-white border-pitch' : 'border-border text-muted'
+              }`}
+            >
+              {opt}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {n === 0 ? (
+        <p className="text-xs text-muted">Pas encore de QCM noté à afficher.</p>
+      ) : (
+        <svg
+          viewBox={`0 0 ${largeur} ${hauteur}`}
+          className="w-full h-auto"
+          role="img"
+          aria-label="Évolution des notes dans le temps"
+        >
+          {[0, 25, 50, 75, 100].map((pct) => (
+            <g key={pct}>
+              <line
+                x1={gaucheAxe}
+                x2={largeur - droiteMarge}
+                y1={y(pct)}
+                y2={y(pct)}
+                stroke="#E3E1DB"
+                strokeWidth={1}
+              />
+              <text x={gaucheAxe - 4} y={y(pct) + 3} textAnchor="end" fontSize={8} fill="#6B6B64">
+                {pct}%
+              </text>
+            </g>
+          ))}
+
+          {points.length > 1 && <polyline points={polyline} fill="none" stroke="#1F6F4A" strokeWidth={2} />}
+
+          {points.map((p, i) => (
+            <g key={i}>
+              <circle cx={p.x} cy={p.y} r={3.5} fill="#1F6F4A" />
+              <text
+                x={p.x}
+                y={labelsInclines ? basAxe + 10 : basAxe + 14}
+                textAnchor={labelsInclines ? 'end' : 'middle'}
+                fontSize={8}
+                fill="#6B6B64"
+                transform={labelsInclines ? `rotate(-40 ${p.x} ${basAxe + 10})` : undefined}
+              >
+                {formatDateCourte(p.d.submitted_at)}
+              </text>
+            </g>
+          ))}
+        </svg>
+      )}
+    </div>
+  );
+}
+
 export default function Historique() {
   const { session } = useAuth();
   const [lignes, setLignes] = useState<LigneHistorique[]>([]);
@@ -95,6 +199,8 @@ export default function Historique() {
 
       {erreur && <p className="text-sm text-card-red mb-4">{erreur}</p>}
       {lignes.length === 0 && <p className="text-sm text-muted">Aucun QCM répondu pour le moment.</p>}
+
+      {lignes.length > 0 && <GraphiqueEvolution lignes={lignes} />}
 
       <ul>
         {lignes.map((l) => (
